@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ShoppingBag, Zap, AlertCircle } from 'lucide-react';
+import { useState, useCallback, useRef } from 'react';
+import { ShoppingBag, Zap, AlertCircle, Shield } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
 import { ListingCard } from '@/components/ListingCard';
 import { SearchFilters } from '@/components/SearchFilters';
@@ -9,22 +9,41 @@ import { StatsBar } from '@/components/StatsBar';
 import { searchEbay, EbayItem } from '@/lib/api/ebay';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+
+const THROTTLE_DELAY = 1500; // 1.5 seconds between requests
 
 const Index = () => {
   const [items, setItems] = useState<EbayItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isThrottled, setIsThrottled] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
   const [sort, setSort] = useState('newlyListed');
   const [totalResults, setTotalResults] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [rateLimitInfo, setRateLimitInfo] = useState<{ remaining: number; resetIn: number } | null>(null);
+  const lastSearchTime = useRef<number>(0);
   const { toast } = useToast();
 
-  const handleSearch = async (query: string, selectedSort?: string) => {
+  const handleSearch = useCallback(async (query: string, selectedSort?: string) => {
+    // Client-side throttling
+    const now = Date.now();
+    if (now - lastSearchTime.current < THROTTLE_DELAY) {
+      setIsThrottled(true);
+      toast({
+        title: 'Please wait',
+        description: 'Rate limit in effect. Try again in a moment.',
+      });
+      setTimeout(() => setIsThrottled(false), THROTTLE_DELAY);
+      return;
+    }
+
     setIsLoading(true);
     setHasSearched(true);
     setCurrentQuery(query);
     setError(null);
+    lastSearchTime.current = now;
 
     try {
       const results = await searchEbay({
@@ -32,6 +51,17 @@ const Index = () => {
         limit: 50,
         sort: (selectedSort || sort) as any,
       });
+
+      // Handle rate limit response
+      if ('retryAfter' in results) {
+        setError(`Rate limit exceeded. Please wait ${results.retryAfter} seconds.`);
+        toast({
+          title: 'Rate limit reached',
+          description: `Too many requests. Please wait ${results.retryAfter}s before trying again.`,
+          variant: 'destructive',
+        });
+        return;
+      }
 
       setItems(results.itemSummaries || []);
       setTotalResults(results.total || 0);
@@ -45,7 +75,14 @@ const Index = () => {
     } catch (err) {
       console.error('Search error:', err);
       const errorMessage = err instanceof Error ? err.message : 'Failed to search eBay';
-      setError(errorMessage);
+      
+      // Check for rate limit error
+      if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
+        setError('Rate limit exceeded. Please wait before making more requests.');
+      } else {
+        setError(errorMessage);
+      }
+      
       toast({
         title: 'Search failed',
         description: errorMessage,
@@ -54,7 +91,7 @@ const Index = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [sort, toast]);
 
   const handleSortChange = (newSort: string) => {
     setSort(newSort);
@@ -76,9 +113,15 @@ const Index = () => {
               <h1 className="text-xl font-bold">eBay Scraper</h1>
               <p className="text-xs text-muted-foreground">Search and analyze eBay listings</p>
             </div>
-            <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-              <Zap className="h-3 w-3 text-success" />
-              <span>API Connected</span>
+            <div className="ml-auto flex items-center gap-4">
+              <Badge variant="outline" className="flex items-center gap-1.5 text-xs">
+                <Shield className="h-3 w-3" />
+                Rate Limited
+              </Badge>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Zap className="h-3 w-3 text-success" />
+                <span>API Connected</span>
+              </div>
             </div>
           </div>
         </div>
@@ -96,7 +139,11 @@ const Index = () => {
               Search millions of products and analyze market trends in real-time
             </p>
           </div>
-          <SearchBar onSearch={handleSearch} isLoading={isLoading} />
+          <SearchBar onSearch={handleSearch} isLoading={isLoading} isThrottled={isThrottled} />
+          <p className="text-center text-xs text-muted-foreground mt-3">
+            <Shield className="inline h-3 w-3 mr-1" />
+            Rate limited: 30 requests per minute • Max 50 results per search
+          </p>
         </div>
 
         {/* Error Alert */}
