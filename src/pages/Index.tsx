@@ -1,35 +1,57 @@
+
 import { useState, useCallback, useRef } from 'react';
-import { ShoppingBag, Zap, AlertCircle, Shield } from 'lucide-react';
+import { ShoppingBag, Zap, AlertCircle, Shield, Shirt, Search } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
 import { ListingCard } from '@/components/ListingCard';
+import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/VintedVestiaireListingCard';
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { StatsBar } from '@/components/StatsBar';
 import { searchEbay, EbayItem } from '@/lib/api/ebay';
+import { searchVinted } from '@/lib/api/fashion';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PaginationControls } from '@/components/PaginationControls';
+import * as XLSX from 'xlsx';
+import { Button } from '@/components/ui/button';
 
 const THROTTLE_DELAY = 1500; // 1.5 seconds between requests
 
+const initialSearchTerms = [
+  'Dior women bags',
+  'Louis Vuitton women bags',
+  'Prada women bags',
+  'Gucci women bags',
+  'Christian Dior women bags',
+  'Michael Kors women bags',
+  'Coach women bags',
+];
+
 const Index = () => {
-  const [items, setItems] = useState<EbayItem[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isThrottled, setIsThrottled] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
-  const [sort, setSort] = useState('newlyListed');
   const [totalResults, setTotalResults] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [rateLimitInfo, setRateLimitInfo] = useState<{ remaining: number; resetIn: number } | null>(null);
+  const [platform, setPlatform] = useState('ebay');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(24);
+  const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
+  const [country, setCountry] = useState('fr');
+  const [hasMore, setHasMore] = useState(false);
+
   const lastSearchTime = useRef<number>(0);
   const { toast } = useToast();
 
-  const handleSearch = useCallback(async (query: string, selectedSort?: string) => {
-    // Client-side throttling
+  const handleSearch = useCallback(async (query: string, options: any = {}) => {
+    const { page = 1, itemsPerPage: newItemsPerPage, maxPrice: newMaxPrice, country: newCountry } = options;
+
     const now = Date.now();
-    if (now - lastSearchTime.current < THROTTLE_DELAY) {
+    if (now - lastSearchTime.current < THROTTLE_DELAY && page === 1) {
       setIsThrottled(true);
       toast({
         title: 'Please wait',
@@ -43,110 +65,204 @@ const Index = () => {
     setHasSearched(true);
     setCurrentQuery(query);
     setError(null);
+    if (page === 1) {
+      setItems([]);
+      setTotalResults(0);
+    }
     lastSearchTime.current = now;
 
     try {
-      const results = await searchEbay({
-        query,
-        limit: 50,
-        sort: (selectedSort || sort) as any,
-      });
+      let results;
+      const searchOptions = {
+        page,
+        itemsPerPage: newItemsPerPage || itemsPerPage,
+        maxPrice: newMaxPrice !== undefined ? newMaxPrice : maxPrice,
+        country: newCountry || country,
+      };
 
-      // Handle rate limit response
-      if ('retryAfter' in results) {
-        setError(`Rate limit exceeded. Please wait ${results.retryAfter} seconds.`);
-        toast({
-          title: 'Rate limit reached',
-          description: `Too many requests. Please wait ${results.retryAfter}s before trying again.`,
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setItems(results.itemSummaries || []);
-      setTotalResults(results.total || 0);
-
-      if (!results.itemSummaries || results.itemSummaries.length === 0) {
-        toast({
-          title: 'No results',
-          description: `No listings found for "${query}"`,
-        });
+      if (platform === 'vinted') {
+        results = await searchVinted(query, searchOptions);
+        if (results.success) {
+          setItems(results.data || []);
+          setTotalResults(results.count || 0);
+          setHasMore(results.pagination?.has_more || false);
+          if (results.data.length === 0) {
+            toast({ title: 'No results', description: `No listings found for "${query}" on Vinted` });
+          }
+        } else {
+          setError(results.error || 'Failed to fetch from Vinted.');
+          toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
+        }
+      } else { // eBay
+        results = await searchEbay({ query, limit: newItemsPerPage || itemsPerPage });
+        if ('retryAfter' in results) {
+          const errorMsg = `Rate limit exceeded. Please wait ${results.retryAfter} seconds.`;
+          setError(errorMsg);
+          toast({ title: 'Rate limit reached', description: `Please wait ${results.retryAfter}s.`, variant: 'destructive' });
+          return;
+        }
+        setItems(results.itemSummaries || []);
+        setTotalResults(results.total || 0);
+        if (!results.itemSummaries || results.itemSummaries.length === 0) {
+          toast({ title: 'No results', description: `No listings found for "${query}" on eBay` });
+        }
       }
     } catch (err) {
       console.error('Search error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to search eBay';
-      
-      // Check for rate limit error
-      if (errorMessage.includes('Rate limit') || errorMessage.includes('429')) {
-        setError('Rate limit exceeded. Please wait before making more requests.');
-      } else {
-        setError(errorMessage);
-      }
-      
-      toast({
-        title: 'Search failed',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      const errorMessage = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setError(errorMessage);
+      toast({ title: 'Search Failed', description: errorMessage, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
-  }, [sort, toast]);
+  }, [toast, platform, itemsPerPage, maxPrice, country]);
 
-  const handleSortChange = (newSort: string) => {
-    setSort(newSort);
-    if (currentQuery) {
-      handleSearch(currentQuery, newSort);
-    }
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage);
+    handleSearch(currentQuery, { page: newPage });
   };
+
+  const handleItemsPerPageChange = (newValue: number) => {
+    setItemsPerPage(newValue);
+    setCurrentPage(1);
+    if (currentQuery) {
+      handleSearch(currentQuery, { itemsPerPage: newValue, page: 1 });
+    }
+  }
+
+  const handleMaxPriceChange = (newValue: number | undefined) => {
+    setMaxPrice(newValue);
+  }
+  
+  const handleApplyPriceChange = () => {
+    if (currentQuery) {
+      handleSearch(currentQuery, { page: 1 });
+    }
+  }
+
+  const handleCountryChange = (newCountry: string) => {
+    setCountry(newCountry);
+    setCurrentPage(1);
+    if (currentQuery) {
+      handleSearch(currentQuery, { country: newCountry, page: 1 });
+    }
+  }
+  
+  const handleExport = () => {
+    if (!items.length) {
+      toast({ title: 'No data to export', description: 'Please perform a search first.' });
+      return;
+    }
+
+    const worksheet = XLSX.utils.json_to_sheet(items);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Listings");
+
+    // Generate a unique filename
+    const fileName = `listings_${platform}_${new Date().toISOString()}.xlsx`;
+    
+    // Trigger the download
+    XLSX.writeFile(workbook, fileName);
+
+    toast({ title: 'Export Successful', description: `Downloaded ${items.length} listings to ${fileName}` });
+  };
+
+  const handlePlatformChange = (newPlatform: string) => {
+    setPlatform(newPlatform);
+    setItems([]);
+    setIsLoading(false);
+    setHasSearched(false);
+    setCurrentQuery('');
+    setTotalResults(0);
+    setError(null);
+    setCurrentPage(1);
+    setMaxPrice(undefined);
+    setCountry('fr');
+    setItemsPerPage(24);
+  };
+
+  const platformConfig = {
+    ebay: { title: "Multi-Platform Scraper", subtitle: "Search across eBay and Vinted", gradient: "gradient-text", icon: <ShoppingBag className="h-6 w-6 text-primary" /> },
+    vinted: { title: "Multi-Platform Scraper", subtitle: "Search across eBay and Vinted", gradient: "gradient-text-vinted", icon: <Shirt className="h-6 w-6 text-green-500" /> },
+  }
+
+  const currentPlatformConfig = platformConfig[platform as keyof typeof platformConfig];
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
       <header className="border-b border-border/50 backdrop-blur-xl bg-background/80 sticky top-0 z-50">
         <div className="container py-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-primary/10">
-              <ShoppingBag className="h-6 w-6 text-primary" />
+            <div className={`p-2 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10`}>
+                <ShoppingBag className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">eBay Scraper</h1>
-              <p className="text-xs text-muted-foreground">Search and analyze eBay listings</p>
-            </div>
-            <div className="ml-auto flex items-center gap-4">
-              <Badge variant="outline" className="flex items-center gap-1.5 text-xs">
-                <Shield className="h-3 w-3" />
-                Rate Limited
-              </Badge>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Zap className="h-3 w-3 text-success" />
-                <span>API Connected</span>
-              </div>
+              <h1 className="text-xl font-bold">Multi-Platform Scraper</h1>
+              <p className="text-xs text-muted-foreground">Search across eBay and Vinted</p>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="container py-8">
-        {/* Search Section */}
         <div className="max-w-4xl mx-auto mb-10">
           <div className="text-center mb-8">
-            <h2 className="text-4xl font-bold mb-3">
-              <span className="gradient-text">Scrape eBay</span> Listings
-            </h2>
+             <h2 className={`text-4xl font-bold mb-3 ${currentPlatformConfig.gradient}`}>
+                Scrape {platform.charAt(0).toUpperCase() + platform.slice(1)}
+              </h2>
             <p className="text-muted-foreground text-lg">
-              Search millions of products and analyze market trends in real-time
+              Search millions of products in real-time
             </p>
           </div>
-          <SearchBar onSearch={handleSearch} isLoading={isLoading} isThrottled={isThrottled} />
+          
+          <Tabs defaultValue="ebay" onValueChange={handlePlatformChange} className="w-full mb-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="ebay">eBay</TabsTrigger>
+              <TabsTrigger value="vinted">Vinted</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          
+          <SearchBar onSearch={(query) => handleSearch(query, { page: 1})} isLoading={isLoading} isThrottled={isThrottled} />
+          
+          <div className="flex flex-wrap items-center gap-2 mt-4">
+            {initialSearchTerms.map((term) => (
+              <Badge
+                key={term}
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => handleSearch(term, { page: 1 })}
+              >
+                {term}
+              </Badge>
+            ))}
+          </div>
+
+          {hasSearched && (
+            <>
+              <SearchFilters
+                totalResults={totalResults}
+                itemsPerPage={itemsPerPage}
+                onItemsPerPageChange={handleItemsPerPageChange}
+                maxPrice={maxPrice}
+                onMaxPriceChange={handleMaxPriceChange}
+                onApplyPriceChange={handleApplyPriceChange}
+                country={country}
+                onCountryChange={handleCountryChange}
+              />
+              <div className="flex justify-end mb-4">
+                <Button onClick={handleExport} size="sm" className="bg-green-500 hover:bg-green-600 text-white">
+                  Export to Excel
+                </Button>
+              </div>
+            </>
+          )}
+
           <p className="text-center text-xs text-muted-foreground mt-3">
             <Shield className="inline h-3 w-3 mr-1" />
-            Rate limited: 30 requests per minute • Max 50 results per search
+            {platform === 'ebay' ? 'Rate limited: 30 requests per minute' : 'No rate limits on this platform'}
           </p>
         </div>
 
-        {/* Error Alert */}
         {error && (
           <Alert variant="destructive" className="mb-6 max-w-4xl mx-auto">
             <AlertCircle className="h-4 w-4" />
@@ -154,36 +270,31 @@ const Index = () => {
           </Alert>
         )}
 
-        {/* Results Section */}
         {isLoading ? (
-          <div className="max-w-4xl mx-auto">
-            <LoadingSkeleton />
-          </div>
+          <div className="max-w-4xl mx-auto"><LoadingSkeleton /></div>
         ) : hasSearched && items.length > 0 ? (
           <div className="max-w-4xl mx-auto">
-            <StatsBar items={items} />
-            <SearchFilters
-              sort={sort}
-              onSortChange={handleSortChange}
-              totalResults={totalResults}
-            />
             <div className="space-y-4">
-              {items.map((item, index) => (
-                <ListingCard key={item.itemId} item={item} index={index} />
-              ))}
+              {items.map((item, index) =>
+                platform === 'ebay' ? (
+                  <ListingCard key={(item as EbayItem).itemId} item={item as EbayItem} index={index} />
+                ) : (
+                  <VintedVestiaireListingCard key={index} item={item as VintedVestiaireItem} index={index} platform={'Vinted'} />
+                )
+              )}
             </div>
+            <PaginationControls currentPage={currentPage} onPageChange={handlePageChange} hasMore={hasMore} />
           </div>
         ) : hasSearched && items.length === 0 ? (
           <EmptyState type="no-results" query={currentQuery} />
         ) : (
-          <EmptyState type="initial" />
+          <EmptyState type="initial" onSearch={handleSearch} initialSearchTerms={initialSearchTerms} />
         )}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-border/50 py-6 mt-12">
         <div className="container text-center text-sm text-muted-foreground">
-          <p>Powered by eBay Browse API • Data refreshed in real-time</p>
+          <p>Powered by the Vinted and eBay APIs</p>
         </div>
       </footer>
     </div>
