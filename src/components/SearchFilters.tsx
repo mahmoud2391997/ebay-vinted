@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SearchFiltersProps {
   totalResults: number;
@@ -38,20 +37,19 @@ export function SearchFilters({
   showSold,
   onShowSoldChange,
 }: SearchFiltersProps) {
-  const isMobile = useIsMobile();
   const showAdvancedFilters = platform === 'vinted' || platform === 'ebay';
 
   return (
-    <div className={`flex ${isMobile ? 'flex-col gap-4' : 'items-center justify-between'} glass-panel p-4 mb-6`}>
+    <div className="flex flex-col md:flex-row md:items-center md:justify-between glass-panel p-4 mb-6 gap-4">
       <div className="flex items-center gap-3">
         <span className="text-muted-foreground">Found</span>
-        <span className={`font-mono ${isMobile ? 'text-base' : 'text-lg'} font-semibold text-primary`}>
+        <span className="font-mono text-base md:text-lg font-semibold text-primary">
           {totalResults.toLocaleString()}
         </span>
         <span className="text-muted-foreground">listings</span>
       </div>
 
-      <div className={`flex ${isMobile ? 'flex-col w-full gap-4' : 'items-center gap-4'}`}>
+      <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex items-center space-x-2">
           <Checkbox id="show-sold" checked={showSold} onCheckedChange={onShowSoldChange} />
           <Label htmlFor="show-sold" className="cursor-pointer">Show sold items</Label>
@@ -59,10 +57,10 @@ export function SearchFilters({
 
         {showAdvancedFilters && (
           <>
-            <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
                 <Label>Country</Label>
                 <Select value={country} onValueChange={onCountryChange} disabled={platform !== 'vinted'}>
-                    <SelectTrigger className={`${isMobile ? 'w-full' : 'w-[100px]'} bg-secondary/50 border-border/50`}>
+                    <SelectTrigger className="w-full md:w-[100px] bg-secondary/50 border-border/50">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -74,26 +72,28 @@ export function SearchFilters({
                     </SelectContent>
                 </Select>
             </div>
-            <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
-                <Label htmlFor="maxPrice">Max Price</Label>
-                <Input
-                id="maxPrice"
-                type="number"
-                value={maxPrice || ''}
-                onChange={(e) => onMaxPriceChange(e.target.value ? Number(e.target.value) : undefined)}
-                className={`${isMobile ? 'w-full' : 'w-[100px]'} bg-secondary/50 border-border/50`}
-                placeholder="e.g., 500"
-                />
-                <Button onClick={onApplyPriceChange} size="sm" className={`${isMobile ? 'w-full' : ''}`}>
-                  Apply
-                </Button>
+            <div className="flex flex-col md:flex-row md:items-center gap-2">
+                <Label htmlFor="maxPrice" className="md:hidden">Max Price</Label>
+                <div className="flex flex-col md:flex-row items-center gap-2 w-full">
+                    <Input
+                    id="maxPrice"
+                    type="number"
+                    value={maxPrice || ''}
+                    onChange={(e) => onMaxPriceChange(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full md:w-[100px] bg-secondary/50 border-border/50"
+                    placeholder="e.g., 500"
+                    />
+                    <Button onClick={onApplyPriceChange} size="sm" className="w-full md:w-auto">
+                      Apply
+                    </Button>
+                </div>
             </div>
           </>
         )}
-        <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
+        <div className="flex flex-col md:flex-row md:items-center gap-2">
             <Label>Per Page</Label>
             <Select value={String(itemsPerPage)} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
-                <SelectTrigger className={`${isMobile ? 'w-full' : 'w-[80px]'} bg-secondary/50 border-border/50`}>
+                <SelectTrigger className="w-full md:w-[80px] bg-secondary/50 border-border/50">
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
