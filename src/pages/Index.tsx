@@ -8,7 +8,8 @@ import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { searchEbay, EbayItem } from '@/lib/api/ebay';
-import { searchVinted, searchVintedSold } from '@/lib/api/fashion';
+import { searchVinted } from '@/lib/api/fashion';
+import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -40,15 +41,22 @@ const Index = () => {
   const [error, setError] = useState<string | null>(null);
   const [platform, setPlatform] = useState('ebay');
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(24);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined);
   const [country, setCountry] = useState('fr');
   const [hasMore, setHasMore] = useState(false);
   const [showSold, setShowSold] = useState(false);
+  const [cache, setCache] = useState<Map<string, any>>(new Map());
+  const { searchSoldItems, isLoading: isSoldLoading, error: soldError } = useSearchVintedSold();
   const isMobile = useIsMobile();
 
   const lastSearchTime = useRef<number>(0);
   const { toast } = useToast();
+
+  const getCacheKey = (query: string, platform: string, options: any) => {
+    const { page = 1, itemsPerPage: newItemsPerPage, maxPrice: newMaxPrice, country: newCountry, showSold: newShowSold } = options;
+    return `${platform}-${query}-${page}-${newItemsPerPage || 25}-${newMaxPrice || 'none'}-${newCountry || 'fr'}-${newShowSold || false}`;
+  };
 
   const handleSearch = useCallback(async (query: string, options: any = {}) => {
     const { page = 1, itemsPerPage: newItemsPerPage, maxPrice: newMaxPrice, country: newCountry, showSold: newShowSold } = options;
@@ -58,6 +66,21 @@ const Index = () => {
       setIsThrottled(true);
       toast({ title: 'Please wait', description: 'Rate limit in effect. Try again in a moment.' });
       setTimeout(() => setIsThrottled(false), THROTTLE_DELAY);
+      return;
+    }
+
+    const cacheKey = getCacheKey(query, platform, options);
+    const cachedData = cache.get(cacheKey);
+    
+    if (cachedData) {
+      setItems(cachedData.items);
+      setTotalResults(cachedData.totalResults);
+      setHasMore(cachedData.hasMore);
+      setHasSearched(true);
+      setCurrentQuery(query);
+      setError(null);
+      setIsLoading(false);
+      toast({ title: 'Cached results', description: 'Loaded from cache' });
       return;
     }
 
@@ -71,7 +94,7 @@ const Index = () => {
     try {
       let results;
       const currentShowSold = newShowSold !== undefined ? newShowSold : showSold;
-      const itemsPerPageValue = newItemsPerPage || (currentShowSold ? 5 : 24);
+      const itemsPerPageValue = newItemsPerPage || 25;
 
       const searchOptions = {
         page,
@@ -82,34 +105,71 @@ const Index = () => {
 
       if (platform === 'vinted') {
         if (currentShowSold) {
-          results = await searchVintedSold(query, searchOptions);
+          results = await searchSoldItems(query, searchOptions);
         } else {
           results = await searchVinted(query, searchOptions);
         }
 
         if (results.success) {
-          setItems(results.data || []);
-          setTotalResults(currentShowSold ? results.data?.length || 0 : results.count || 0);
-          setHasMore(currentShowSold ? false : results.pagination?.has_more || false);
+          const resultData = {
+            items: results.data || [],
+            totalResults: currentShowSold ? results.count || results.data?.length || 0 : results.count || 0,
+            hasMore: results.pagination?.has_more || false
+          };
+          
+          setCache(prev => new Map(prev).set(cacheKey, resultData));
+          
+          setItems(resultData.items);
+          setTotalResults(resultData.totalResults);
+          setHasMore(resultData.hasMore);
           if (results.data.length === 0) toast({ title: 'No results', description: `No listings found for "${query}"` });
         } else {
           setError(results.error || 'Failed to fetch from Vinted.');
           toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
         }
       } else { // eBay
-        const ebayOptions: any = { query, limit: itemsPerPageValue };
+        const offset = (page - 1) * itemsPerPageValue;
+        const ebayOptions: any = { 
+          query, 
+          limit: itemsPerPageValue,
+          offset
+        };
         if (currentShowSold) {
-          ebayOptions.filter = 'SOLD:true';
+          // Try eBay's actual filter format for sold items
+          // Note: eBay Browse API may not support sold items, trying different formats
+          ebayOptions.filter = 'soldItemsOnly:true';
+          toast({ 
+            title: 'eBay Sold Items', 
+            description: 'Note: eBay Browse API has limited sold items support. Results may vary.',
+            variant: 'default' 
+          });
         }
+        
+        // Debug: Log the eBay API request
+        console.log('eBay API request:', ebayOptions);
+        
         results = await searchEbay(ebayOptions);
+        
+        // Debug: Log the eBay API response
+        console.log('eBay API response:', results);
+        
         if ('retryAfter' in results) {
           const errorMsg = `Rate limit exceeded. Please wait ${results.retryAfter} seconds.`;
           setError(errorMsg);
           toast({ title: 'Rate limit reached', description: `Please wait ${results.retryAfter}s.`, variant: 'destructive' });
           return;
         }
-        setItems(results.itemSummaries || []);
-        setTotalResults(results.total || 0);
+        
+        const resultData = {
+          items: results.itemSummaries || [],
+          totalResults: results.total || 0,
+          hasMore: (results.offset || 0) + (results.itemSummaries?.length || 0) < (results.total || 0)
+        };
+        
+        setCache(prev => new Map(prev).set(cacheKey, resultData));
+        
+        setItems(resultData.items);
+        setTotalResults(resultData.totalResults);
         if (!results.itemSummaries || results.itemSummaries.length === 0) {
           toast({ title: 'No results', description: `No listings found for "${query}" on eBay` });
         }
@@ -149,9 +209,8 @@ const Index = () => {
 
   const handleShowSoldChange = (checked: boolean) => {
     setShowSold(checked);
-    setItemsPerPage(checked ? 5 : 24);
     if (currentQuery) {
-      handleSearch(currentQuery, { showSold: checked, page: 1, itemsPerPage: checked ? 5 : 24 });
+      handleSearch(currentQuery, { showSold: checked, page: 1 });
     }
   };
   
@@ -170,6 +229,29 @@ const Index = () => {
 
   const handlePlatformChange = (newPlatform: string) => {
     setPlatform(newPlatform);
+    
+    // Check if there's cached data for this platform with current search
+    if (currentQuery) {
+      const cacheKey = getCacheKey(currentQuery, newPlatform, {
+        page: currentPage,
+        itemsPerPage,
+        maxPrice,
+        country,
+        showSold
+      });
+      
+      const cachedData = cache.get(cacheKey);
+      if (cachedData) {
+        setItems(cachedData.items);
+        setTotalResults(cachedData.totalResults);
+        setHasMore(cachedData.hasMore);
+        setHasSearched(true);
+        setError(null);
+        return;
+      }
+    }
+    
+    // Reset UI if no cached data found
     setItems([]);
     setIsLoading(false);
     setHasSearched(false);
@@ -180,7 +262,7 @@ const Index = () => {
     setMaxPrice(undefined);
     setCountry('fr');
     setShowSold(false);
-    setItemsPerPage(24);
+    setItemsPerPage(25);
   };
 
   const platformConfig = {
@@ -283,7 +365,7 @@ const Index = () => {
                 )
               )}
             </div>
-            {!showSold && <PaginationControls currentPage={currentPage} onPageChange={handlePageChange} hasMore={hasMore} />}
+            <PaginationControls currentPage={currentPage} onPageChange={handlePageChange} hasMore={hasMore} />
           </div>
         ) : hasSearched && items.length === 0 ? (
           <EmptyState type="no-results" query={currentQuery} />

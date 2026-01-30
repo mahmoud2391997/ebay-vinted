@@ -13,7 +13,9 @@ import {
   MessageCircle,
   MapPin,
   CheckCircle,
+  ExternalLink,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ListingCardProps {
   item: EbayItem;
@@ -23,8 +25,8 @@ interface ListingCardProps {
 
 export function ListingCard({ item, isSold }: ListingCardProps) {
   const imageUrl = item.image?.imageUrl;
-  const price = isSold ? item.marketingPrice?.originalPrice?.value || item.price.value : item.price.value;
-  const currency = isSold ? item.marketingPrice?.originalPrice?.currency || item.price.currency : item.price.currency;
+  const price = item.price.value;
+  const currency = item.price.currency;
   const shippingCost = item.shippingOptions?.[0]?.shippingCostType === 'CALCULATED' ? 'Calculated' : item.shippingOptions?.[0]?.shippingCost?.value ? `+$${item.shippingOptions[0].shippingCost.value}` : 'Free';
 
   return (
@@ -61,7 +63,7 @@ export function ListingCard({ item, isSold }: ListingCardProps) {
 
           <div className="text-sm text-muted-foreground mt-2">
             <p><strong>Condition:</strong> {item.condition}</p>
-            {item.itemLocation && <p className="flex items-center gap-1 mt-1"><MapPin className="h-3 w-3" /> {item.itemLocation.city}, {item.itemLocation.country}</p>}
+            {item.itemLocation && <p className="flex items-center gap-1 mt-1"><MapPin className="h-3 w-3" /> {item.itemLocation.country}</p>}
           </div>
 
           {item.seller && (
@@ -82,10 +84,21 @@ export function ListingCard({ item, isSold }: ListingCardProps) {
           )}
         </CardContent>
         <CardFooter className="p-0 mt-4">
-          <div className="flex flex-wrap gap-2">
-            {item.topRatedBuyingExperience && <Badge variant="secondary" className="flex items-center gap-1"><CheckCircle className="h-3 w-3 text-green-500" /> Top Rated</Badge>}
-            {item.priorityListing && <Badge variant="secondary">Priority Listing</Badge>}
-            {item.listingMarketplaceId && <Badge variant="outline">{item.listingMarketplaceId}</Badge>}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 w-full">
+            <div className="flex flex-wrap gap-2">
+              {item.categories && item.categories.length > 0 && (
+                <Badge variant="outline">{item.categories[0].categoryName}</Badge>
+              )}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className={`${!isSold && 'hover:bg-primary hover:text-primary-foreground hover:border-primary'} transition-all`}
+              onClick={() => window.open(item.itemWebUrl, '_blank')}
+            >
+              View on eBay
+              <ExternalLink className="ml-2 h-3 w-3" />
+            </Button>
           </div>
         </CardFooter>
       </div>

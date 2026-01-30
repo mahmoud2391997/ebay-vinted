@@ -86,7 +86,6 @@ export function VintedVestiaireListingCard({ item, index, platform, isSold }: Vi
                     size="sm"
                     className={`${isMobile ? '' : 'mt-2'} ${!isSold && 'hover:bg-primary hover:text-primary-foreground hover:border-primary'} transition-all`}
                     onClick={() => window.open(item.Link, '_blank')}
-                    disabled={isSold}
                 >
                     View on {platform}
                     <ExternalLink className="ml-2 h-3 w-3" />
