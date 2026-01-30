@@ -55,7 +55,6 @@ export interface SearchParams {
 export async function searchEbay(params: SearchParams): Promise<SearchResponse> {
     const { data, error } = await supabase.functions.invoke('ebay-search', {
         body: params,
-        responseType: 'text' 
     });
 
     if (error) {
@@ -63,16 +62,7 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
         throw new Error(error.message || 'Failed to invoke eBay search function');
     }
 
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        console.error('Failed to parse response from eBay search function. Response:', data);
-        if (typeof data === 'string' && data.toLowerCase().includes('not found')) {
-            throw new Error('The eBay search service is currently unavailable (Not Found). The Supabase function may not be deployed correctly.');
-        }
-        const responseHint = typeof data === 'string' ? data.substring(0, 200) : 'Non-string response';
-        throw new Error(`Received an invalid response from the eBay search service. The service may be down or misconfigured. Response start: "${responseHint}"`);
-    }
+    return data;
 }
 
 export function formatPrice(price: { value: string; currency: string }): string {

@@ -39,7 +39,7 @@ export function SearchFilters({
   onShowSoldChange,
 }: SearchFiltersProps) {
   const isMobile = useIsMobile();
-  const showAdvancedFilters = platform === 'vinted';
+  const showAdvancedFilters = platform === 'vinted' || platform === 'ebay';
 
   return (
     <div className={`flex ${isMobile ? 'flex-col gap-4' : 'items-center justify-between'} glass-panel p-4 mb-6`}>
@@ -61,7 +61,7 @@ export function SearchFilters({
           <>
             <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
                 <Label>Country</Label>
-                <Select value={country} onValueChange={onCountryChange}>
+                <Select value={country} onValueChange={onCountryChange} disabled={platform !== 'vinted'}>
                     <SelectTrigger className={`${isMobile ? 'w-full' : 'w-[100px]'} bg-secondary/50 border-border/50`}>
                         <SelectValue />
                     </SelectTrigger>

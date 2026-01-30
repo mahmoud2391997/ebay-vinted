@@ -267,7 +267,7 @@ const Index = () => {
           <Alert variant="destructive" className="mb-6 max-w-4xl mx-auto">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
-          </Aler
+          </Alert>
         )}
 
         {isLoading ? (
@@ -301,4 +301,4 @@ const Index = () => {
   );
 };
 
-export default Index;    
+export default Index;
