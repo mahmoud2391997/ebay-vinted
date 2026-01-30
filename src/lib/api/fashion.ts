@@ -15,7 +15,7 @@ export const searchVinted = async (query: string, options: SearchOptions = {}) =
         items_per_page: String(options.itemsPerPage || 25),
     });
     if (options.maxPrice) {
-        params.append('price_to', String(options.maxPrice));
+        params.append('max_price', String(options.maxPrice));
     }
     if (options.country) {
         params.append('country', options.country);
@@ -37,7 +37,7 @@ export const searchVintedSold = async (query: string, options: SearchOptions = {
     });
 
     if (options.maxPrice) {
-        params.append('price_to', String(options.maxPrice));
+        params.append('max_price', String(options.maxPrice));
     }
     if (options.country) {
         params.append('country', options.country);

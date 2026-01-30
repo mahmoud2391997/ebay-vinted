@@ -134,15 +134,30 @@ const Index = () => {
           limit: itemsPerPageValue,
           offset
         };
+        
+        // Build filters array
+        const filters = [];
+        
         if (currentShowSold) {
           // Try eBay's actual filter format for sold items
           // Note: eBay Browse API may not support sold items, trying different formats
-          ebayOptions.filter = 'soldItemsOnly:true';
+          filters.push('soldItemsOnly:true');
           toast({ 
             title: 'eBay Sold Items', 
             description: 'Note: eBay Browse API has limited sold items support. Results may vary.',
             variant: 'default' 
           });
+        }
+        
+        // Add max price filter if specified
+        const maxPriceValue = newMaxPrice !== undefined ? newMaxPrice : maxPrice;
+        if (maxPriceValue) {
+          filters.push(`price:[..${maxPriceValue}],priceCurrency:USD`);
+        }
+        
+        // Combine filters
+        if (filters.length > 0) {
+          ebayOptions.filter = filters.join(',');
         }
         
         // Debug: Log the eBay API request
@@ -198,7 +213,7 @@ const Index = () => {
   const handleMaxPriceChange = (newValue: number | undefined) => setMaxPrice(newValue);
   
   const handleApplyPriceChange = () => {
-    if (currentQuery) handleSearch(currentQuery, { page: 1 });
+    if (currentQuery) handleSearch(currentQuery, { page: 1, maxPrice });
   }
 
   const handleCountryChange = (newCountry: string) => {
