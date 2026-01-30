@@ -8,6 +8,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface SearchFiltersProps {
   totalResults: number;
@@ -18,6 +20,9 @@ interface SearchFiltersProps {
   country: string;
   onCountryChange: (value: string) => void;
   onApplyPriceChange: () => void;
+  platform: string;
+  showSold: boolean;
+  onShowSoldChange: (checked: boolean) => void;
 }
 
 export function SearchFilters({
@@ -29,55 +34,82 @@ export function SearchFilters({
   country,
   onCountryChange,
   onApplyPriceChange,
+  platform,
+  showSold,
+  onShowSoldChange,
 }: SearchFiltersProps) {
+  const isMobile = useIsMobile();
+  const showAdvancedFilters = platform === 'vinted';
+
   return (
-    <div className="flex items-center justify-between glass-panel p-4 mb-6">
+    <div className={`flex ${isMobile ? 'flex-col gap-4' : 'items-center justify-between'} glass-panel p-4 mb-6`}>
       <div className="flex items-center gap-3">
         <span className="text-muted-foreground">Found</span>
-        <span className="font-mono text-lg font-semibold text-primary">
+        <span className={`font-mono ${isMobile ? 'text-base' : 'text-lg'} font-semibold text-primary`}>
           {totalResults.toLocaleString()}
         </span>
         <span className="text-muted-foreground">listings</span>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2">
-            <Label>Country</Label>
-            <Select value={country} onValueChange={onCountryChange}>
-                <SelectTrigger className="w-[100px] bg-secondary/50 border-border/50">
-                    <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="fr">France</SelectItem>
-                    <SelectItem value="es">Spain</SelectItem>
-                    <SelectItem value="it">Italy</SelectItem>
-                    <SelectItem value="de">Germany</SelectItem>
-                    <SelectItem value="uk">UK</SelectItem>
-                </SelectContent>
-            </Select>
+      <div className={`flex ${isMobile ? 'flex-col w-full gap-4' : 'items-center gap-4'}`}>
+        <div className="flex items-center space-x-2">
+          <Checkbox id="show-sold" checked={showSold} onCheckedChange={onShowSoldChange} />
+          <Label htmlFor="show-sold" className="cursor-pointer">Show sold items</Label>
         </div>
-        <div className="flex items-center gap-2">
-            <Label htmlFor="maxPrice">Max Price</Label>
-            <Input
-            id="maxPrice"
-            type="number"
-            value={maxPrice || ''}
-            onChange={(e) => onMaxPriceChange(e.target.value ? Number(e.target.value) : undefined)}
-            className="w-[100px] bg-secondary/50 border-border/50"
-            placeholder="e.g., 500"
-            />
-            <Button onClick={onApplyPriceChange} size="sm">Apply</Button>
-        </div>
-        <div className="flex items-center gap-2">
+
+        {showAdvancedFilters && (
+          <>
+            <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
+                <Label>Country</Label>
+                <Select value={country} onValueChange={onCountryChange}>
+                    <SelectTrigger className={`${isMobile ? 'w-full' : 'w-[100px]'} bg-secondary/50 border-border/50`}>
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="fr">France</SelectItem>
+                        <SelectItem value="es">Spain</SelectItem>
+                        <SelectItem value="it">Italy</SelectItem>
+                        <SelectItem value="de">Germany</SelectItem>
+                        <SelectItem value="uk">UK</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
+                <Label htmlFor="maxPrice">Max Price</Label>
+                <Input
+                id="maxPrice"
+                type="number"
+                value={maxPrice || ''}
+                onChange={(e) => onMaxPriceChange(e.target.value ? Number(e.target.value) : undefined)}
+                className={`${isMobile ? 'w-full' : 'w-[100px]'} bg-secondary/50 border-border/50`}
+                placeholder="e.g., 500"
+                />
+                <Button onClick={onApplyPriceChange} size="sm" className={`${isMobile ? 'w-full' : ''}`}>
+                  Apply
+                </Button>
+            </div>
+          </>
+        )}
+        <div className={`flex ${isMobile ? 'flex-col gap-2' : 'items-center gap-2'}`}>
             <Label>Per Page</Label>
             <Select value={String(itemsPerPage)} onValueChange={(value) => onItemsPerPageChange(Number(value))}>
-                <SelectTrigger className="w-[80px] bg-secondary/50 border-border/50">
+                <SelectTrigger className={`${isMobile ? 'w-full' : 'w-[80px]'} bg-secondary/50 border-border/50`}>
                     <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                    <SelectItem value="24">24</SelectItem>
-                    <SelectItem value="50">50</SelectItem>
-                    <SelectItem value="100">100</SelectItem>
+                  {showSold ? (
+                    <>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="15">15</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="24">24</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
             </Select>
         </div>
