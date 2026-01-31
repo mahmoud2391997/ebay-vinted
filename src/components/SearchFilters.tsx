@@ -51,8 +51,14 @@ export function SearchFilters({
 
       <div className="flex flex-col md:flex-row md:items-center gap-4">
         <div className="flex items-center space-x-2">
-          <Checkbox id="show-sold" checked={showSold} onCheckedChange={onShowSoldChange} />
-          <Label htmlFor="show-sold" className="cursor-pointer">Show sold items</Label>
+          <Checkbox 
+            id="show-sold" 
+            checked={showSold} 
+            onCheckedChange={onShowSoldChange}
+          />
+          <Label htmlFor="show-sold" className="cursor-pointer">
+            Show sold items
+          </Label>
         </div>
 
         {showAdvancedFilters && (
