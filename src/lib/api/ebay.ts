@@ -63,7 +63,8 @@ const getApiUrl = (path: string) => {
     if (!supabaseUrl) {
       throw new Error("VITE_SUPABASE_URL not configured in production environment");
     }
-    return `${supabaseUrl}/functions/v1/ebay-proxy${path}`;
+    const fullPath = path.startsWith('/') ? path : `/${path}`;
+    return `${supabaseUrl}/functions/v1/ebay-proxy${fullPath}`;
   } else {
     return `/api${path}`;
   }
@@ -175,13 +176,26 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
             'itemFilter(0).value': 'true',
         });
 
-        const url = getApiUrl(`/ebay-finding/services/search/FindingService/v1?${searchParams.toString()}`);
+        const url = getApiUrl(`/finding?${searchParams.toString()}`);
 
         const response = await fetch(url);
 
         if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Failed to fetch from eBay Finding API: ${response.status} ${errorText}`);
+            console.error("eBay Finding API Error:", errorText);
+            let friendlyMessage = `Failed to fetch from eBay Finding API: ${response.status}`;
+            try {
+                const errorPayload = JSON.parse(errorText);
+                const firstError = errorPayload?.errorMessage?.[0]?.error?.[0];
+                if (firstError?.message?.[0]) {
+                    if (firstError.errorId?.[0] === "10001") {
+                        friendlyMessage = "You have exceeded the daily limit for searching sold items on eBay's Finding API. Please try again tomorrow.";
+                    } else {
+                        friendlyMessage = firstError.message[0];
+                    }
+                }
+            } catch (e) {}
+            return { total: 0, limit: 0, offset: 0, error: friendlyMessage };
         }
 
         const data = await response.json();

@@ -20,10 +20,10 @@ export default defineConfig(({ mode }) => ({
           'Access-Control-Allow-Origin': '*',
         }
       },
-      '/api/ebay-finding': {
-        target: 'https://svcs.ebay.com',
+      '/api/finding': {
+        target: 'https://svcs.ebay.com/services/search/FindingService/v1',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api\/ebay-finding/, ''),
+        rewrite: (path) => path.replace(/^\/api\/finding/, ''),
       },
     },
   },
