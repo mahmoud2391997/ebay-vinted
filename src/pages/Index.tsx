@@ -17,7 +17,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaginationControls } from '@/components/PaginationControls';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
-import { useIsMobile } from '@/hooks/use-mobile';
 
 const THROTTLE_DELAY = 1500;
 
@@ -52,7 +51,6 @@ const Index = () => {
   const [cache, setCache] = useState<Map<string, any>>(new Map());
   
   const { searchSoldItems } = useSearchVintedSold();
-  const isMobile = useIsMobile();
   const lastSearchTime = useRef<number>(0);
   const { toast } = useToast();
 
@@ -235,9 +233,9 @@ const Index = () => {
   return (
     <div className="min-h-screen">
       <header className="border-b border-border/50 backdrop-blur-xl bg-background/80 sticky top-0 z-50">
-        <div className={`container py-4 ${isMobile ? 'px-4' : ''}`}>
+        <div className="container py-4 px-4">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10`}>
+            <div className="p-2 rounded-xl bg-gradient-to-br from-primary/10 to-secondary/10">
                 <ShoppingBag className="h-6 w-6 text-primary" />
             </div>
             <div>
@@ -248,7 +246,7 @@ const Index = () => {
         </div>
       </header>
 
-      <main className={`container py-8 ${isMobile ? 'px-4' : ''}`}>
+      <main className="container py-8 px-4">
         <div className="max-w-4xl mx-auto mb-10">
           <div className="text-center mb-8">
              <h2 className={`text-4xl font-bold mb-3 ${currentPlatformConfig.gradient}`}>
@@ -291,8 +289,8 @@ const Index = () => {
                   showSold={searchState.showSold}
                   onShowSoldChange={handleShowSoldChange}
                 />
-              <div className={`flex justify-end mb-4 ${isMobile ? 'w-full' : ''}`}>
-                <Button onClick={handleExport} size="sm" className={`bg-green-500 hover:bg-green-600 text-white ${isMobile ? 'w-full' : ''}`}>
+              <div className="flex justify-end mb-4">
+                <Button onClick={handleExport} size="sm" className="bg-green-500 hover:bg-green-600 text-white">
                   Export to Excel
                 </Button>
               </div>
@@ -335,7 +333,7 @@ const Index = () => {
       </main>
 
       <footer className="border-t border-border/50 py-6 mt-12">
-        <div className={`container text-center text-sm text-muted-foreground ${isMobile ? 'px-4' : ''}`}>
+        <div className="container text-center text-sm text-muted-foreground px-4">
           <p>Powered by the Vinted and eBay APIs</p>
         </div>
       </footer>
