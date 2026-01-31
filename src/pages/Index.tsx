@@ -102,9 +102,12 @@ const Index = () => {
         };
 
         if (platform === 'vinted') {
+          console.log('Vinted search - showSold:', searchState.showSold, 'query:', searchState.query);
           results = searchState.showSold
             ? await searchSoldItems(searchState.query, apiOptions)
             : await searchVinted(searchState.query, apiOptions);
+
+          console.log('Vinted results count:', results.success ? results.data?.length : 0);
 
           if (results.success) {
             const resultData = {
