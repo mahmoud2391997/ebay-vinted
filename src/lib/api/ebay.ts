@@ -57,6 +57,18 @@ interface TokenCache {
 
 let tokenCache: TokenCache | null = null;
 
+const getApiUrl = (path: string) => {
+  if (import.meta.env.PROD) {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    if (!supabaseUrl) {
+      throw new Error("VITE_SUPABASE_URL not configured in production environment");
+    }
+    return `${supabaseUrl}/functions/v1/ebay-proxy${path}`;
+  } else {
+    return `/api${path}`;
+  }
+};
+
 async function getApplicationToken(): Promise<string> {
   if (tokenCache && tokenCache.expiresAt > Date.now()) {
     return tokenCache.token;
@@ -70,8 +82,9 @@ async function getApplicationToken(): Promise<string> {
   }
 
   const credentials = btoa(`${appId}:${certId}`);
+  const url = getApiUrl('/ebay/identity/v1/oauth2/token');
 
-  const response = await fetch('/api/ebay/identity/v1/oauth2/token', {
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -114,7 +127,7 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
             searchParams.set('filter', filter);
         }
 
-        const url = `/api/ebay/buy/browse/v1/item_summary/search?${searchParams.toString()}`;
+        const url = getApiUrl(`/ebay/buy/browse/v1/item_summary/search?${searchParams.toString()}`);
 
         const response = await fetch(url, {
             method: 'GET',
@@ -162,7 +175,7 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
             'itemFilter(0).value': 'true',
         });
 
-        const url = `/api/ebay-finding/services/search/FindingService/v1?${searchParams.toString()}`;
+        const url = getApiUrl(`/ebay-finding/services/search/FindingService/v1?${searchParams.toString()}`);
 
         const response = await fetch(url);
 

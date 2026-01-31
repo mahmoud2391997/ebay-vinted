@@ -7,7 +7,7 @@ import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/Vi
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { searchEbay, EbayItem } from '@/lib/api/ebay';
+import { searchEbay, searchEbaySold, EbayItem } from '@/lib/api/ebay';
 import { searchVinted } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
@@ -136,23 +136,25 @@ const Index = () => {
         } else { // eBay
           const offset = (searchState.page - 1) * searchState.itemsPerPage;
           const ebayOptions: any = { query: searchState.query, limit: searchState.itemsPerPage, offset };
-          const filters = [];
-          if (searchState.showSold) filters.push('soldItemsOnly:true');
-          if (searchState.minPrice && searchState.maxPrice) {
-            filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
-          } else if (searchState.minPrice) {
-            filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
-          } else if (searchState.maxPrice) {
-            filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+          
+          if (searchState.showSold) {
+            results = await searchEbaySold(ebayOptions);
+          } else {
+            const filters = [];
+            if (searchState.minPrice && searchState.maxPrice) {
+              filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
+            } else if (searchState.minPrice) {
+              filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
+            } else if (searchState.maxPrice) {
+              filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+            }
+            if (filters.length > 0) ebayOptions.filter = filters.join(',');
+            results = await searchEbay(ebayOptions);
           }
-          if (filters.length > 0) ebayOptions.filter = filters.join(',');
 
-          results = await searchEbay(ebayOptions);
-
-          if ('retryAfter' in results) {
-            const errorMsg = `Rate limit exceeded. Please wait ${results.retryAfter} seconds.`;
-            setError(errorMsg);
-            toast({ title: 'Rate limit reached', description: `Please wait ${results.retryAfter}s.`, variant: 'destructive' });
+          if (results.error) {
+            setError(results.error);
+            toast({ title: 'eBay Search Failed', description: results.error, variant: 'destructive' });
           } else {
             const resultData = {
               items: results.itemSummaries || [],
