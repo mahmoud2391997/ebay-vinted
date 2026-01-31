@@ -11,6 +11,21 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      '/api/ebay': {
+        target: 'https://api.ebay.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ebay/, ''),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+        }
+      },
+      '/api/ebay-finding': {
+        target: 'https://svcs.ebay.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/ebay-finding/, ''),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
