@@ -36,8 +36,14 @@ const Index = () => {
     page: 1,
     itemsPerPage: 25,
     maxPrice: undefined as number | undefined,
+    minPrice: undefined as number | undefined,
     country: 'fr',
     showSold: false,
+  });
+
+  const [priceInputs, setPriceInputs] = useState({
+    minPrice: undefined as number | undefined,
+    maxPrice: undefined as number | undefined,
   });
 
   const [items, setItems] = useState<any[]>([]);
@@ -55,8 +61,8 @@ const Index = () => {
   const { toast } = useToast();
 
   const getCacheKey = (platform: string, state: typeof searchState) => {
-    const { query, page, itemsPerPage, maxPrice, country, showSold } = state;
-    return `${platform}-${query}-${page}-${itemsPerPage}-${maxPrice || 'none'}-${country}-${showSold}`;
+    const { query, page, itemsPerPage, maxPrice, minPrice, country, showSold } = state;
+    return `${platform}-${query}-${page}-${itemsPerPage}-${maxPrice || 'none'}-${minPrice || 'none'}-${country}-${showSold}`;
   };
 
   useEffect(() => {
@@ -98,6 +104,7 @@ const Index = () => {
           page: searchState.page,
           itemsPerPage: searchState.itemsPerPage,
           maxPrice: searchState.maxPrice,
+          minPrice: searchState.minPrice,
           country: searchState.country,
         };
 
@@ -131,7 +138,13 @@ const Index = () => {
           const ebayOptions: any = { query: searchState.query, limit: searchState.itemsPerPage, offset };
           const filters = [];
           if (searchState.showSold) filters.push('soldItemsOnly:true');
-          if (searchState.maxPrice) filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+          if (searchState.minPrice && searchState.maxPrice) {
+            filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
+          } else if (searchState.minPrice) {
+            filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
+          } else if (searchState.maxPrice) {
+            filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+          }
           if (filters.length > 0) ebayOptions.filter = filters.join(',');
 
           results = await searchEbay(ebayOptions);
@@ -179,7 +192,12 @@ const Index = () => {
       page: 1,
       showSold: false, // Reset filters for a new search
       maxPrice: undefined,
+      minPrice: undefined,
     }));
+    setPriceInputs({
+      minPrice: undefined,
+      maxPrice: undefined,
+    });
   };
 
   const handlePageChange = (newPage: number) => {
@@ -190,12 +208,21 @@ const Index = () => {
     setSearchState(prevState => ({ ...prevState, itemsPerPage: newValue, page: 1 }));
   };
 
+  const handleMinPriceChange = (newValue: number | undefined) => {
+    setPriceInputs(prev => ({ ...prev, minPrice: newValue }));
+  };
+
   const handleMaxPriceChange = (newValue: number | undefined) => {
-    setSearchState(prevState => ({ ...prevState, maxPrice: newValue }));
+    setPriceInputs(prev => ({ ...prev, maxPrice: newValue }));
   };
   
   const handleApplyPriceChange = () => {
-    setSearchState(prevState => ({ ...prevState, page: 1 }));
+    setSearchState(prevState => ({ 
+      ...prevState, 
+      minPrice: priceInputs.minPrice,
+      maxPrice: priceInputs.maxPrice,
+      page: 1 
+    }));
   };
 
   const handleCountryChange = (newCountry: string) => {
@@ -283,8 +310,10 @@ const Index = () => {
                   totalResults={totalResults}
                   itemsPerPage={searchState.itemsPerPage}
                   onItemsPerPageChange={handleItemsPerPageChange}
-                  maxPrice={searchState.maxPrice}
+                  maxPrice={priceInputs.maxPrice}
                   onMaxPriceChange={handleMaxPriceChange}
+                  minPrice={priceInputs.minPrice}
+                  onMinPriceChange={handleMinPriceChange}
                   onApplyPriceChange={handleApplyPriceChange}
                   country={searchState.country}
                   onCountryChange={handleCountryChange}

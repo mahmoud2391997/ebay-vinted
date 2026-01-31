@@ -16,6 +16,8 @@ interface SearchFiltersProps {
   onItemsPerPageChange: (value: number) => void;
   maxPrice: number | undefined;
   onMaxPriceChange: (value: number | undefined) => void;
+  minPrice: number | undefined;
+  onMinPriceChange: (value: number | undefined) => void;
   country: string;
   onCountryChange: (value: string) => void;
   onApplyPriceChange: () => void;
@@ -30,6 +32,8 @@ export function SearchFilters({
   onItemsPerPageChange,
   maxPrice,
   onMaxPriceChange,
+  minPrice,
+  onMinPriceChange,
   country,
   onCountryChange,
   onApplyPriceChange,
@@ -79,15 +83,24 @@ export function SearchFilters({
                 </Select>
             </div>
             <div className="flex flex-col md:flex-row md:items-center gap-2">
-                <Label htmlFor="maxPrice" className="md:hidden">Max Price</Label>
+                <Label className="md:hidden">Price Range</Label>
                 <div className="flex flex-col md:flex-row items-center gap-2 w-full">
+                    <Input
+                    id="minPrice"
+                    type="number"
+                    value={minPrice || ''}
+                    onChange={(e) => onMinPriceChange(e.target.value ? Number(e.target.value) : undefined)}
+                    className="w-full md:w-[100px] bg-secondary/50 border-border/50"
+                    placeholder="Min price"
+                    />
+                    <span className="text-muted-foreground">-</span>
                     <Input
                     id="maxPrice"
                     type="number"
                     value={maxPrice || ''}
                     onChange={(e) => onMaxPriceChange(e.target.value ? Number(e.target.value) : undefined)}
                     className="w-full md:w-[100px] bg-secondary/50 border-border/50"
-                    placeholder="e.g., 500"
+                    placeholder="Max price"
                     />
                     <Button onClick={onApplyPriceChange} size="sm" className="w-full md:w-auto">
                       Apply

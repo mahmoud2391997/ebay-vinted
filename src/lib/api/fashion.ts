@@ -5,6 +5,7 @@ interface SearchOptions {
   page?: number;
   itemsPerPage?: number;
   maxPrice?: number;
+  minPrice?: number;
   country?: string;
 }
 
@@ -16,6 +17,9 @@ export const searchVinted = async (query: string, options: SearchOptions = {}) =
     });
     if (options.maxPrice) {
         params.append('max_price', String(options.maxPrice));
+    }
+    if (options.minPrice) {
+        params.append('min_price', String(options.minPrice));
     }
     if (options.country) {
         params.append('country', options.country);
@@ -38,6 +42,9 @@ export const searchVintedSold = async (query: string, options: SearchOptions = {
 
     if (options.maxPrice) {
         params.append('max_price', String(options.maxPrice));
+    }
+    if (options.minPrice) {
+        params.append('min_price', String(options.minPrice));
     }
     if (options.country) {
         params.append('country', options.country);
