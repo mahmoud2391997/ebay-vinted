@@ -1,5 +1,5 @@
 
-interface EbayItem {
+export interface EbayItem {
   itemId: string;
   title: string;
   image?: {
@@ -55,19 +55,46 @@ interface TokenCache {
   expiresAt: number;
 }
 
+interface SearchCache {
+  data: SearchResponse;
+  timestamp: number;
+}
+
 let tokenCache: TokenCache | null = null;
+const searchCache = new Map<string, SearchCache>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Rate limiting
+let lastApiCall = 0;
+const MIN_API_INTERVAL = 1000; // 1 second between calls
+
+// Clean up expired cache entries periodically
+function cleanupCache() {
+    const now = Date.now();
+    for (const [key, entry] of searchCache.entries()) {
+        if (now - entry.timestamp > CACHE_DURATION) {
+            searchCache.delete(key);
+        }
+    }
+}
+
+// Clean up cache every 10 minutes
+setInterval(cleanupCache, 10 * 60 * 1000);
 
 const getApiUrl = (path: string) => {
-  if (import.meta.env.PROD) {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    if (!supabaseUrl) {
-      throw new Error("VITE_SUPABASE_URL not configured in production environment");
-    }
-    const fullPath = path.startsWith('/') ? path : `/${path}`;
-    return `${supabaseUrl}/functions/v1/ebay-proxy${fullPath}`;
-  } else {
-    return `/api${path}`;
+  // Use local proxy server to avoid CORS issues
+  const proxyBaseUrl = 'http://localhost:3001';
+  
+  if (path.includes('/ebay/identity/')) {
+    return `${proxyBaseUrl}/api/ebay/identity/v1/oauth2/token`;
   }
+  if (path.includes('/ebay/buy/browse/')) {
+    return `${proxyBaseUrl}/api/ebay/buy/browse/v1/item_summary/search`;
+  }
+  if (path.includes('/finding')) {
+    return `${proxyBaseUrl}/api/finding`;
+  }
+  throw new Error(`Unknown eBay API path: ${path}`);
 };
 
 async function getApplicationToken(): Promise<string> {
@@ -82,16 +109,17 @@ async function getApplicationToken(): Promise<string> {
     throw new Error('eBay credentials not configured in .env file');
   }
 
-  const credentials = btoa(`${appId}:${certId}`);
   const url = getApiUrl('/ebay/identity/v1/oauth2/token');
 
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/json',
     },
-    body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+    body: JSON.stringify({
+      appId,
+      certId
+    }),
   });
 
   if (!response.ok) {
@@ -111,11 +139,26 @@ async function getApplicationToken(): Promise<string> {
 
 export async function searchEbay(params: SearchParams): Promise<SearchResponse> {
     try {
-        const token = await getApplicationToken();
         const { query, limit = 50, offset = 0, sort, filter } = params;
 
+        console.log('searchEbay called with params:', params);
+
+        // Validate query parameter
+        if (!query || query.trim() === '') {
+            console.log('Empty query detected, returning error');
+            return { 
+                total: 0, 
+                limit: 0, 
+                offset: 0, 
+                error: 'Search query is required' 
+            };
+        }
+
+        const token = await getApplicationToken();
+
+        const trimmedQuery = query.trim();
         const searchParams = new URLSearchParams({
-            q: query,
+            q: trimmedQuery,
             limit: limit.toString(),
             offset: offset.toString(),
         });
@@ -128,7 +171,8 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
             searchParams.set('filter', filter);
         }
 
-        const url = getApiUrl(`/ebay/buy/browse/v1/item_summary/search?${searchParams.toString()}`);
+        const url = `${getApiUrl('/ebay/buy/browse/v1/item_summary/search')}?${searchParams.toString()}`;
+        console.log('Making request to:', url);
 
         const response = await fetch(url, {
             method: 'GET',
@@ -156,12 +200,42 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
 
 export async function searchEbaySold(params: SearchParams): Promise<SearchResponse> {
     try {
+        const { query, limit = 50, offset = 0 } = params;
+
+        // Validate query parameter
+        if (!query || query.trim() === '') {
+            return { 
+                total: 0, 
+                limit: 0, 
+                offset: 0, 
+                error: 'Search query is required' 
+            };
+        }
+
+        // Create cache key
+        const cacheKey = `sold_${JSON.stringify(params)}`;
+        
+        // Check cache first
+        const cached = searchCache.get(cacheKey);
+        if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+            console.log('Returning cached eBay sold results');
+            return cached.data;
+        }
+
+        // Rate limiting - wait minimum interval between calls
+        const now = Date.now();
+        const timeSinceLastCall = now - lastApiCall;
+        if (timeSinceLastCall < MIN_API_INTERVAL) {
+            const delay = MIN_API_INTERVAL - timeSinceLastCall;
+            console.log(`Rate limiting: waiting ${delay}ms before API call`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        lastApiCall = Date.now();
+
         const appId = import.meta.env.VITE_EBAY_APP_ID;
         if (!appId) {
             throw new Error('eBay App ID not configured');
         }
-
-        const { query, limit = 50, offset = 0 } = params;
 
         const searchParams = new URLSearchParams({
             'OPERATION-NAME': 'findCompletedItems',
@@ -169,14 +243,14 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
             'SECURITY-APPNAME': appId,
             'RESPONSE-DATA-FORMAT': 'JSON',
             'REST-PAYLOAD': '',
-            'keywords': query,
+            'keywords': query.trim(),
             'paginationInput.entriesPerPage': limit.toString(),
             'paginationInput.pageNumber': (Math.floor(offset / limit) + 1).toString(),
             'itemFilter(0).name': 'SoldItemsOnly',
             'itemFilter(0).value': 'true',
         });
 
-        const url = getApiUrl(`/finding?${searchParams.toString()}`);
+        const url = `${getApiUrl('/finding')}?${searchParams.toString()}`;
 
         const response = await fetch(url);
 
@@ -184,12 +258,18 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
             const errorText = await response.text();
             console.error("eBay Finding API Error:", errorText);
             let friendlyMessage = `Failed to fetch from eBay Finding API: ${response.status}`;
+            
+            // Handle CORS errors specifically
+            if (errorText.includes('CORS') || errorText.includes('cross-origin')) {
+                friendlyMessage = "CORS error: Cannot call eBay API directly from browser. You need a server-side proxy or use a browser extension to bypass CORS.";
+            }
+            
             try {
                 const errorPayload = JSON.parse(errorText);
                 const firstError = errorPayload?.errorMessage?.[0]?.error?.[0];
                 if (firstError?.message?.[0]) {
                     if (firstError.errorId?.[0] === "10001") {
-                        friendlyMessage = "You have exceeded the daily limit for searching sold items on eBay's Finding API. Please try again tomorrow.";
+                        friendlyMessage = "You have exceeded the daily limit for searching sold items on eBay's Finding API. Please try again tomorrow or use active listings instead.";
                     } else {
                         friendlyMessage = firstError.message[0];
                     }
@@ -214,12 +294,20 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
             condition: item.condition?.[0].conditionDisplayName[0],
         }));
 
-        return {
+        const result = {
             total: parseInt(searchResult["@count"]),
             limit,
             offset,
             itemSummaries: transformedItems,
         };
+
+        // Cache the result
+        searchCache.set(cacheKey, {
+            data: result,
+            timestamp: Date.now()
+        });
+
+        return result;
 
     } catch (error) {
         console.error('eBay sold search function error:', error);

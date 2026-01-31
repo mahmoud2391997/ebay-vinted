@@ -11,6 +11,7 @@ import { searchEbay, searchEbaySold, EbayItem } from '@/lib/api/ebay';
 import { searchVinted } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
+import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +42,8 @@ const Index = () => {
     showSold: false,
   });
 
+  const [isInitialMount, setIsInitialMount] = useState(true);
+
   const [priceInputs, setPriceInputs] = useState({
     minPrice: undefined as number | undefined,
     maxPrice: undefined as number | undefined,
@@ -59,6 +62,9 @@ const Index = () => {
   const { searchSoldItems } = useSearchVintedSold();
   const lastSearchTime = useRef<number>(0);
   const { toast } = useToast();
+  
+  // Debounce search state to prevent excessive API calls
+  const debouncedSearchState = useDebounce(searchState, 800);
 
   const getCacheKey = (platform: string, state: typeof searchState) => {
     const { query, page, itemsPerPage, maxPrice, minPrice, country, showSold } = state;
@@ -66,20 +72,29 @@ const Index = () => {
   };
 
   useEffect(() => {
-    if (!searchState.query) {
+    // Skip initial mount to prevent empty search
+    if (isInitialMount) {
+      setIsInitialMount(false);
+      console.log('Skipping initial mount search');
       return;
     }
 
+    if (!debouncedSearchState.query || debouncedSearchState.query.trim() === '') {
+      console.log('Skipping search - empty query');
+      return;
+    }
+
+    console.log('Performing search for:', debouncedSearchState.query);
+
     const performSearch = async () => {
       const now = Date.now();
-      if (now - lastSearchTime.current < THROTTLE_DELAY && searchState.page === 1) {
+      if (now - lastSearchTime.current < THROTTLE_DELAY && debouncedSearchState.page === 1) {
         setIsThrottled(true);
-        toast({ title: 'Please wait', description: 'Rate limit in effect. Try again in a moment.' });
         setTimeout(() => setIsThrottled(false), THROTTLE_DELAY);
         return;
       }
 
-      const cacheKey = getCacheKey(platform, searchState);
+      const cacheKey = getCacheKey(platform, debouncedSearchState);
       const cachedData = cache.get(cacheKey);
 
       if (cachedData) {
@@ -95,31 +110,31 @@ const Index = () => {
       setIsLoading(true);
       setHasSearched(true);
       setError(null);
-      if (searchState.page === 1) setItems([]);
+      if (debouncedSearchState.page === 1) setItems([]);
       lastSearchTime.current = now;
 
       try {
         let results;
         const apiOptions = {
-          page: searchState.page,
-          itemsPerPage: searchState.itemsPerPage,
-          maxPrice: searchState.maxPrice,
-          minPrice: searchState.minPrice,
-          country: searchState.country,
+          page: debouncedSearchState.page,
+          itemsPerPage: debouncedSearchState.itemsPerPage,
+          maxPrice: debouncedSearchState.maxPrice,
+          minPrice: debouncedSearchState.minPrice,
+          country: debouncedSearchState.country,
         };
 
         if (platform === 'vinted') {
-          console.log('Vinted search - showSold:', searchState.showSold, 'query:', searchState.query);
-          results = searchState.showSold
-            ? await searchSoldItems(searchState.query, apiOptions)
-            : await searchVinted(searchState.query, apiOptions);
+          console.log('Vinted search - showSold:', debouncedSearchState.showSold, 'query:', debouncedSearchState.query);
+          results = debouncedSearchState.showSold
+            ? await searchSoldItems(debouncedSearchState.query, apiOptions)
+            : await searchVinted(debouncedSearchState.query, apiOptions);
 
           console.log('Vinted results count:', results.success ? results.data?.length : 0);
 
           if (results.success) {
             const resultData = {
               items: results.data || [],
-              totalResults: searchState.showSold ? results.count || results.data?.length || 0 : results.count || 0,
+              totalResults: debouncedSearchState.showSold ? results.count || results.data?.length || 0 : results.count || 0,
               hasMore: results.pagination?.has_more || false,
             };
             setCache(prev => new Map(prev).set(cacheKey, resultData));
@@ -127,26 +142,26 @@ const Index = () => {
             setTotalResults(resultData.totalResults);
             setHasMore(resultData.hasMore);
             if (!results.data || results.data.length === 0) {
-              toast({ title: 'No results', description: `No listings found for "${searchState.query}"` });
+              toast({ title: 'No results', description: `No listings found for "${debouncedSearchState.query}"` });
             }
           } else {
             setError(results.error || 'Failed to fetch from Vinted.');
             toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
           }
         } else { // eBay
-          const offset = (searchState.page - 1) * searchState.itemsPerPage;
-          const ebayOptions: any = { query: searchState.query, limit: searchState.itemsPerPage, offset };
+          const offset = (debouncedSearchState.page - 1) * debouncedSearchState.itemsPerPage;
+          const ebayOptions: any = { query: debouncedSearchState.query, limit: debouncedSearchState.itemsPerPage, offset };
           
-          if (searchState.showSold) {
+          if (debouncedSearchState.showSold) {
             results = await searchEbaySold(ebayOptions);
           } else {
             const filters = [];
-            if (searchState.minPrice && searchState.maxPrice) {
-              filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
-            } else if (searchState.minPrice) {
-              filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
-            } else if (searchState.maxPrice) {
-              filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+            if (debouncedSearchState.minPrice && debouncedSearchState.maxPrice) {
+              filters.push(`price:[${debouncedSearchState.minPrice}..${debouncedSearchState.maxPrice}],priceCurrency:USD`);
+            } else if (debouncedSearchState.minPrice) {
+              filters.push(`price:[${debouncedSearchState.minPrice}..],priceCurrency:USD`);
+            } else if (debouncedSearchState.maxPrice) {
+              filters.push(`price:[..${debouncedSearchState.maxPrice}],priceCurrency:USD`);
             }
             if (filters.length > 0) ebayOptions.filter = filters.join(',');
             results = await searchEbay(ebayOptions);
@@ -166,7 +181,7 @@ const Index = () => {
             setTotalResults(resultData.totalResults);
             setHasMore(resultData.hasMore);
             if (!results.itemSummaries || results.itemSummaries.length === 0) {
-              toast({ title: 'No results', description: `No listings found for "${searchState.query}" on eBay` });
+              toast({ title: 'No results', description: `No listings found for "${debouncedSearchState.query}" on eBay` });
             }
           }
         }
@@ -181,7 +196,7 @@ const Index = () => {
     };
 
     performSearch();
-  }, [searchState, platform, cache, toast, searchSoldItems]);
+  }, [debouncedSearchState, platform, cache, toast, searchSoldItems, isInitialMount]);
 
   const handleQuerySearch = (query: string) => {
     setSearchState(prevState => ({ ...prevState, query, page: 1 }));
