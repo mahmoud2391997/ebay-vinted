@@ -1,5 +1,3 @@
-import eBayApi from 'ebay-api';
-
 export interface EbayItem {
   itemId: string;
   title: string;
@@ -52,31 +50,128 @@ interface SearchParams {
   soldItemsOnly?: boolean;
 }
 
-// Initialize eBay SDK
-const eBay = new eBayApi({
-  appId: import.meta.env.VITE_EBAY_APP_ID || process.env.EBAY_APP_ID,
-  certId: import.meta.env.VITE_EBAY_CERT_ID || process.env.EBAY_CERT_ID,
-  sandbox: false,
-  siteId: eBayApi.SiteId.EBAY_US,
-  marketplaceId: eBayApi.MarketplaceId.EBAY_US,
-});
+// Browser-compatible eBay API client
+class EbayBrowserClient {
+  private appId: string;
+  private certId: string;
+  private token: string | null = null;
+  private tokenExpiry: number = 0;
+  private proxyUrl: string;
 
-// Configure proxy for browser usage (CORS workaround)
-if (typeof window !== 'undefined') {
-  // Use a public proxy for development, replace with your own in production
-  const proxyUrl = import.meta.env.VITE_EBAY_PROXY_URL || 'https://ebay.hendt.workers.dev/';
-  
-  eBay.req.instance.interceptors.request.use((request) => {
-    request.url = proxyUrl + request.url;
-    return request;
-  });
+  constructor(appId: string, certId: string, proxyUrl: string = 'https://ebay.hendt.workers.dev/') {
+    this.appId = appId;
+    this.certId = certId;
+    this.proxyUrl = proxyUrl;
+  }
+
+  private async getAuthToken(): Promise<string> {
+    // Check if we have a valid cached token
+    if (this.token && Date.now() < this.tokenExpiry) {
+      return this.token;
+    }
+
+    try {
+      const response = await fetch(`${this.proxyUrl}identity/v1/oauth2/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${btoa(`${this.appId}:${this.certId}`)}`,
+        },
+        body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to get auth token: ${response.status}`);
+      }
+
+      const data = await response.json();
+      this.token = data.access_token;
+      this.tokenExpiry = Date.now() + (data.expires_in - 60) * 1000;
+      
+      return this.token;
+    } catch (error) {
+      console.error('Auth token error:', error);
+      throw error;
+    }
+  }
+
+  async searchBuyApi(params: any): Promise<any> {
+    const token = await this.getAuthToken();
+    
+    const searchParams = new URLSearchParams({
+      q: params.q,
+      limit: params.limit?.toString() || '50',
+      offset: params.offset?.toString() || '0',
+    });
+
+    if (params.sort) {
+      searchParams.set('sort', params.sort);
+    }
+
+    if (params.filter) {
+      searchParams.set('filter', params.filter);
+    }
+
+    const response = await fetch(`${this.proxyUrl}buy/browse/v1/item_summary/search?${searchParams.toString()}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country%3DUS',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Buy API search failed: ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  async searchFindingApi(params: any): Promise<any> {
+    const findingParams = new URLSearchParams({
+      'OPERATION-NAME': 'findCompletedItems',
+      'SERVICE-VERSION': '1.0.0',
+      'RESPONSE-DATA-FORMAT': 'JSON',
+      'REST-PAYLOAD': '',
+      'keywords': params.keywords,
+      'paginationInput.entriesPerPage': params.paginationInput.entriesPerPage.toString(),
+      'paginationInput.pageNumber': params.paginationInput.pageNumber.toString(),
+      'itemFilter(0).name': 'SoldItemsOnly',
+      'itemFilter(0).value': 'true',
+    });
+
+    const response = await fetch(`${this.proxyUrl}finding?${findingParams.toString()}`, {
+      headers: {
+        'X-EBAY-SOA-SECURITY-APPNAME': this.appId,
+        'X-EBAY-SOA-OPERATION-NAME': 'findCompletedItems',
+        'X-EBAY-SOA-SERVICE-VERSION': '1.13.0',
+        'X-EBAY-SOA-REQUEST-DATA-FORMAT': 'JSON',
+        'X-EBAY-SOA-GLOBAL-ID': 'EBAY-US',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Finding API search failed: ${response.status} - ${errorText}`);
+    }
+
+    return response.json();
+  }
 }
+
+// Initialize eBay client
+const eBayClient = new EbayBrowserClient(
+  import.meta.env.VITE_EBAY_APP_ID || '',
+  import.meta.env.VITE_EBAY_CERT_ID || '',
+  import.meta.env.VITE_EBAY_PROXY_URL || 'https://ebay.hendt.workers.dev/'
+);
 
 export async function searchEbaySDK(params: SearchParams): Promise<SearchResponse> {
   try {
     const { query, limit = 50, offset = 0, sort, filter, soldItemsOnly } = params;
 
-    console.log('eBay SDK search called with params:', params);
+    console.log('eBay browser client search called with params:', params);
 
     // Validate query parameter
     if (!query || query.trim() === '') {
@@ -99,8 +194,8 @@ export async function searchEbaySDK(params: SearchParams): Promise<SearchRespons
     // Use Buy API for regular search
     const searchParams: any = {
       q: trimmedQuery,
-      limit: limit.toString(),
-      offset: offset.toString(),
+      limit: limit,
+      offset: offset,
     };
 
     if (sort) {
@@ -111,13 +206,13 @@ export async function searchEbaySDK(params: SearchParams): Promise<SearchRespons
       searchParams.filter = filter;
     }
 
-    console.log('Making eBay SDK request to Buy API:', searchParams);
+    console.log('Making eBay browser client request to Buy API:', searchParams);
 
-    const response = await eBay.buy.browse.search(searchParams);
+    const response = await eBayClient.searchBuyApi(searchParams);
     
-    console.log('eBay SDK response:', response);
+    console.log('eBay browser client response:', response);
 
-    // Transform SDK response to match our interface
+    // Transform response to match our interface
     const transformedItems = response.itemSummaries?.map((item: any) => ({
       itemId: item.itemId,
       title: item.title,
@@ -147,7 +242,7 @@ export async function searchEbaySDK(params: SearchParams): Promise<SearchRespons
     };
 
   } catch (error) {
-    console.error('eBay SDK search error:', error);
+    console.error('eBay browser client search error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to perform eBay search';
     return { total: 0, limit: 0, offset: 0, error: errorMessage };
   }
@@ -157,67 +252,59 @@ export async function searchEbaySoldSDK(params: SearchParams): Promise<SearchRes
   try {
     const { query, limit = 50, offset = 0 } = params;
 
-    console.log('eBay SDK sold items search for:', query);
+    console.log('eBay browser client sold items search for:', query);
 
-    // Use Finding API for sold items via traditional API
+    // Use Finding API for sold items
     const findingParams = {
       keywords: query.trim(),
       paginationInput: {
         entriesPerPage: limit,
         pageNumber: Math.floor(offset / limit) + 1,
       },
-      itemFilter: [
-        {
-          name: 'SoldItemsOnly',
-          value: 'true',
-        },
-      ],
-      outputSelector: ['SellerInfo', 'GalleryInfo'],
     };
 
-    console.log('Making eBay SDK request to Finding API:', findingParams);
+    console.log('Making eBay browser client request to Finding API:', findingParams);
 
-    // Use the traditional Finding API
-    const response = await eBay.finding.findCompletedItems(findingParams);
+    const response = await eBayClient.searchFindingApi(findingParams);
     
-    console.log('eBay SDK Finding API response:', response);
+    console.log('eBay browser client Finding API response:', response);
 
     // Transform Finding API response to match our interface
-    const items = response.findItemsByKeywordsResponse?.[0]?.searchResult?.[0]?.item || [];
+    const items = response.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
     
     const transformedItems = items.map((item: any) => ({
       itemId: item.itemId?.[0] || item.itemId,
       title: item.title?.[0] || item.title || '',
       image: item.galleryURL?.[0] ? { imageUrl: item.galleryURL[0] } : undefined,
       price: {
-        value: item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || item.sellingStatus?.currentPrice?.value || '0',
-        currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.['@currencyId'] || item.sellingStatus?.currentPrice?.currency || 'USD',
+        value: item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0',
+        currency: item.sellingStatus?.[0]?.currentPrice?.[0]?.['@currencyId'] || 'USD',
       },
       itemWebUrl: item.viewItemURL?.[0] || item.viewItemURL || '',
-      condition: item.condition?.[0]?.conditionDisplayName?.[0] || item.condition?.conditionDisplayName,
+      condition: item.condition?.[0]?.conditionDisplayName?.[0],
       seller: item.sellerInfo?.[0] ? {
-        username: item.sellerInfo[0]?.sellerUserName?.[0] || item.sellerInfo?.sellerUserName,
+        username: item.sellerInfo[0]?.sellerUserName?.[0] || '',
         feedbackScore: item.sellerInfo[0]?.feedbackScore?.[0] ? parseInt(item.sellerInfo[0].feedbackScore[0]) : undefined,
-        feedbackPercentage: item.sellerInfo[0]?.positiveFeedbackPercent?.[0] || item.sellerInfo?.positiveFeedbackPercent,
+        feedbackPercentage: item.sellerInfo[0]?.positiveFeedbackPercent?.[0],
       } : undefined,
       categories: item.primaryCategory?.[0] ? [{
-        categoryId: item.primaryCategory[0]?.categoryId?.[0] || item.primaryCategory?.categoryId,
-        categoryName: item.primaryCategory[0]?.categoryName?.[0] || item.primaryCategory?.categoryName,
+        categoryId: item.primaryCategory[0]?.categoryId?.[0] || '',
+        categoryName: item.primaryCategory[0]?.categoryName?.[0] || '',
       }] : undefined,
       itemLocation: {
-        country: item.location?.[0] || item.location || '',
+        country: item.location?.[0] || '',
       },
     }));
 
     return {
-      total: parseInt(response.findItemsByKeywordsResponse?.[0]?.paginationOutput?.[0]?.totalEntries?.[0] || '0'),
+      total: parseInt(response.findCompletedItemsResponse?.[0]?.paginationOutput?.[0]?.totalEntries?.[0] || '0'),
       limit: limit,
       offset: offset,
       itemSummaries: transformedItems,
     };
 
   } catch (error) {
-    console.error('eBay SDK sold search error:', error);
+    console.error('eBay browser client sold search error:', error);
     
     // Check for rate limit error and fall back to regular search
     if (error instanceof Error && (error.message.includes('10001') || error.message.includes('exceeded the number of times'))) {
