@@ -303,59 +303,58 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const clientIP = getClientIP(req);
+  const url = new URL(req.url);
+  const path = url.pathname;
 
-  // Check rate limit
-  const rateLimit = checkRateLimit(clientIP);
-  
-  const rateLimitHeaders = {
-    'X-RateLimit-Limit': RATE_LIMIT.maxRequests.toString(),
-    'X-RateLimit-Remaining': rateLimit.remaining.toString(),
-    'X-RateLimit-Reset': Math.ceil(rateLimit.resetIn / 1000).toString(),
-  };
-
-  if (!rateLimit.allowed) {
-    console.log(`Rate limit exceeded for ${clientIP}`);
-    return new Response(
-      JSON.stringify({ 
-        error: 'Rate limit exceeded. Please wait before making more requests.',
-        retryAfter: Math.ceil(rateLimit.resetIn / 1000),
-      }),
-      { 
-        status: 429, 
-        headers: { 
-          ...corsHeaders, 
-          ...rateLimitHeaders,
-          'Content-Type': 'application/json',
-          'Retry-After': Math.ceil(rateLimit.resetIn / 1000).toString(),
-        } 
-      }
-    );
+  // Route to different handlers based on the path
+  if (path.includes('/identity/v1/oauth2/token')) {
+    return handleTokenRequest(req);
+  } else if (path.includes('/buy/browse/v1/item_summary/search')) {
+    return handleBuySearchRequest(req);
+  } else if (path.includes('/finding')) {
+    return handleFindingRequest(req);
+  } else {
+    // Default search handler (backward compatibility)
+    return handleSearchRequest(req);
   }
+});
 
+async function handleSearchRequest(req: Request) {
   try {
-    const body: SearchRequest = await req.json();
+    const appId = Deno.env.get('EBAY_APP_ID');
+    const certId = Deno.env.get('EBAY_CERT_ID');
 
-    // Validate input
-    const validation = validateInput(body);
-    if (!validation.valid) {
-      return new Response(
-        JSON.stringify({ error: validation.error }),
-        { status: 400, headers: { ...corsHeaders, ...rateLimitHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (!appId || !certId) {
+      throw new Error('eBay credentials not configured');
     }
 
+    const body: SearchRequest = await req.json();
+    
     // Get OAuth token
-    const token = await getApplicationToken();
+    const credentials = btoa(`${appId}:${certId}`);
+    const tokenResponse = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${credentials}`,
+      },
+      body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+    });
+
+    const tokenData = await tokenResponse.json();
+    
+    if (!tokenResponse.ok) {
+      throw new Error(`Failed to get token: ${tokenResponse.status}`);
+    }
 
     // Search eBay
-    const results = await searchEbay(token, body);
+    const results = await searchEbay(tokenData.access_token, body);
 
     console.log(`Found ${results.total || 0} results`);
 
     return new Response(
       JSON.stringify(results),
-      { headers: { ...corsHeaders, ...rateLimitHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error:', error);
@@ -363,7 +362,93 @@ Deno.serve(async (req) => {
     
     return new Response(
       JSON.stringify({ error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, ...rateLimitHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
-});
+}
+
+async function handleTokenRequest(req: Request) {
+  try {
+    const appId = Deno.env.get('EBAY_APP_ID');
+    const certId = Deno.env.get('EBAY_CERT_ID');
+
+    if (!appId || !certId) {
+      throw new Error('eBay credentials not configured');
+    }
+
+    // Get token first
+    const credentials = btoa(`${appId}:${certId}`);
+    const tokenResponse = await fetch('https://api.ebay.com/identity/v1/oauth2/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${credentials}`,
+      },
+      body: 'grant_type=client_credentials&scope=https://api.ebay.com/oauth/api_scope',
+    });
+
+    const tokenData = await tokenResponse.json();
+    
+    if (!tokenResponse.ok) {
+      throw new Error(`Failed to get token: ${tokenResponse.status}`);
+    }
+
+    // Forward the search request
+    const url = new URL(req.url);
+    const searchParams = url.searchParams;
+    
+    const response = await fetch(`https://api.ebay.com/buy/browse/v1/item_summary/search?${searchParams.toString()}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${tokenData.access_token}`,
+        'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US',
+        'X-EBAY-C-ENDUSERCTX': 'contextualLocation=country%3DUS',
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const data = await response.json();
+    
+    return new Response(JSON.stringify(data), {
+      status: response.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Buy search error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+async function handleFindingRequest(req: Request) {
+  try {
+    const appId = Deno.env.get('EBAY_APP_ID');
+
+    if (!appId) {
+      throw new Error('eBay App ID not configured');
+    }
+
+    const url = new URL(req.url);
+    const searchParams = new URLSearchParams(url.searchParams);
+    searchParams.set('SECURITY-APPNAME', appId);
+
+    const response = await fetch(`https://svcs.ebay.com/services/search/FindingService/v1?${searchParams.toString()}`, {
+      method: 'GET',
+    });
+
+    const data = await response.json();
+    
+    return new Response(JSON.stringify(data), {
+      status: response.status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  } catch (error) {
+    console.error('Finding search error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}

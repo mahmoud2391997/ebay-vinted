@@ -164,7 +164,7 @@ class EbayBrowserClient {
 const eBayClient = new EbayBrowserClient(
   import.meta.env.VITE_EBAY_APP_ID || '',
   import.meta.env.VITE_EBAY_CERT_ID || '',
-  import.meta.env.VITE_EBAY_PROXY_URL || 'https://ebay.hendt.workers.dev/'
+  import.meta.env.VITE_EBAY_PROXY_URL || 'https://auzieeqhtonzhsnyvuzt.supabase.co/functions/v1/ebay-search/'
 );
 
 export async function searchEbaySDK(params: SearchParams): Promise<SearchResponse> {
