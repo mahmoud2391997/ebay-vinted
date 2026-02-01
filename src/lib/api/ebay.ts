@@ -48,6 +48,7 @@ interface SearchParams {
   offset?: number;
   sort?: 'price' | '-price' | 'newlyListed' | 'endingSoonest';
   filter?: string;
+  soldItemsOnly?: boolean;
 }
 
 interface TokenCache {

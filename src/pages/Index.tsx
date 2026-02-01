@@ -7,7 +7,7 @@ import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/Vi
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { searchEbay, searchEbaySold, EbayItem } from '@/lib/api/ebay';
+import { searchEbay, EbayItem } from '@/lib/api/ebay';
 import { searchVinted } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
@@ -149,29 +149,33 @@ const Index = () => {
             toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
           }
         } else { // eBay
-          const offset = (debouncedSearchState.page - 1) * debouncedSearchState.itemsPerPage;
-          const searchParams = { query: debouncedSearchState.query, limit: debouncedSearchState.itemsPerPage, offset };
+          const offset = (searchState.page - 1) * searchState.itemsPerPage;
+          const ebayOptions: any = { query: searchState.query, limit: searchState.itemsPerPage, offset };
           
-          if (debouncedSearchState.showSold) {
-            results = await searchEbaySold(searchParams);
-          } else {
-            const filters = [];
-            if (debouncedSearchState.minPrice && debouncedSearchState.maxPrice) {
-              filters.push(`price:[${debouncedSearchState.minPrice}..${debouncedSearchState.maxPrice}],priceCurrency:USD`);
-            } else if (debouncedSearchState.minPrice) {
-              filters.push(`price:[${debouncedSearchState.minPrice}..],priceCurrency:USD`);
-            } else if (debouncedSearchState.maxPrice) {
-              filters.push(`price:[..${debouncedSearchState.maxPrice}],priceCurrency:USD`);
-            }
-            if (filters.length > 0) {
-                searchParams.filter = filters.join(',');
-            }
-            results = await searchEbay(searchParams);
+          if (searchState.showSold) {
+            // Use sold items search
+            ebayOptions.soldItemsOnly = true;
           }
+          
+          // Add price filters for regular search
+          if (!searchState.showSold) {
+            const filters = [];
+            if (searchState.minPrice && searchState.maxPrice) {
+              filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
+            } else if (searchState.minPrice) {
+              filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
+            } else if (searchState.maxPrice) {
+              filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
+            }
+            if (filters.length > 0) ebayOptions.filter = filters.join(',');
+          }
+          
+          results = await searchEbay(ebayOptions);
 
-          if (results.error) {
-            setError(results.error);
-            toast({ title: 'eBay Search Failed', description: results.error, variant: 'destructive' });
+          if ('retryAfter' in results) {
+            const errorMsg = `Rate limit exceeded. Please wait ${results.retryAfter} seconds.`;
+            setError(errorMsg);
+            toast({ title: 'Rate limit reached', description: `Please wait ${results.retryAfter}s.`, variant: 'destructive' });
           } else {
             const resultData = {
               items: results.itemSummaries || [],
