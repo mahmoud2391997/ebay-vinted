@@ -150,10 +150,10 @@ const Index = () => {
           }
         } else { // eBay
           const offset = (debouncedSearchState.page - 1) * debouncedSearchState.itemsPerPage;
-          const ebayOptions: any = { query: debouncedSearchState.query, limit: debouncedSearchState.itemsPerPage, offset };
+          const searchParams = { query: debouncedSearchState.query, limit: debouncedSearchState.itemsPerPage, offset };
           
           if (debouncedSearchState.showSold) {
-            results = await searchEbaySold(ebayOptions);
+            results = await searchEbaySold(searchParams);
           } else {
             const filters = [];
             if (debouncedSearchState.minPrice && debouncedSearchState.maxPrice) {
@@ -163,8 +163,10 @@ const Index = () => {
             } else if (debouncedSearchState.maxPrice) {
               filters.push(`price:[..${debouncedSearchState.maxPrice}],priceCurrency:USD`);
             }
-            if (filters.length > 0) ebayOptions.filter = filters.join(',');
-            results = await searchEbay(ebayOptions);
+            if (filters.length > 0) {
+                searchParams.filter = filters.join(',');
+            }
+            results = await searchEbay(searchParams);
           }
 
           if (results.error) {

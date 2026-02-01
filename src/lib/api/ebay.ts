@@ -82,31 +82,12 @@ function cleanupCache() {
 setInterval(cleanupCache, 10 * 60 * 1000);
 
 const getApiUrl = (path: string) => {
-  // Use local proxy server to avoid CORS issues
-  const proxyBaseUrl = 'http://localhost:3001';
-  
-  if (path.includes('/ebay/identity/')) {
-    return `${proxyBaseUrl}/api/ebay/identity/v1/oauth2/token`;
-  }
-  if (path.includes('/ebay/buy/browse/')) {
-    return `${proxyBaseUrl}/api/ebay/buy/browse/v1/item_summary/search`;
-  }
-  if (path.includes('/finding')) {
-    return `${proxyBaseUrl}/api/finding`;
-  }
-  throw new Error(`Unknown eBay API path: ${path}`);
+  return `/api${path}`;
 };
 
 async function getApplicationToken(): Promise<string> {
   if (tokenCache && tokenCache.expiresAt > Date.now()) {
     return tokenCache.token;
-  }
-
-  const appId = import.meta.env.VITE_EBAY_APP_ID;
-  const certId = import.meta.env.VITE_EBAY_CERT_ID;
-
-  if (!appId || !certId) {
-    throw new Error('eBay credentials not configured in .env file');
   }
 
   const url = getApiUrl('/ebay/identity/v1/oauth2/token');
@@ -116,10 +97,6 @@ async function getApplicationToken(): Promise<string> {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      appId,
-      certId
-    }),
   });
 
   if (!response.ok) {
@@ -232,15 +209,9 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
         }
         lastApiCall = Date.now();
 
-        const appId = import.meta.env.VITE_EBAY_APP_ID;
-        if (!appId) {
-            throw new Error('eBay App ID not configured');
-        }
-
         const searchParams = new URLSearchParams({
             'OPERATION-NAME': 'findCompletedItems',
             'SERVICE-VERSION': '1.0.0',
-            'SECURITY-APPNAME': appId,
             'RESPONSE-DATA-FORMAT': 'JSON',
             'REST-PAYLOAD': '',
             'keywords': query.trim(),
