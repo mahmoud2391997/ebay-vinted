@@ -117,7 +117,7 @@ async function getApplicationToken(): Promise<string> {
 
 export async function searchEbay(params: SearchParams): Promise<SearchResponse> {
     try {
-        const { query, limit = 50, offset = 0, sort, filter } = params;
+        const { query, limit = 50, offset = 0, sort, filter, soldItemsOnly } = params;
 
         console.log('searchEbay called with params:', params);
 
@@ -130,6 +130,12 @@ export async function searchEbay(params: SearchParams): Promise<SearchResponse> 
                 offset: 0, 
                 error: 'Search query is required' 
             };
+        }
+
+        // Use different API for sold items
+        if (soldItemsOnly) {
+            console.log('Using sold items search via Finding API');
+            return await searchEbaySold(params);
         }
 
         const token = await getApplicationToken();
@@ -229,6 +235,15 @@ export async function searchEbaySold(params: SearchParams): Promise<SearchRespon
         if (!response.ok) {
             const errorText = await response.text();
             console.error("eBay Finding API Error:", errorText);
+            
+            // Check for rate limit error
+            if (errorText.includes('10001') || errorText.includes('exceeded the number of times')) {
+                console.log('Sold items API rate limit reached, falling back to regular search');
+                // Fall back to regular search
+                const regularParams = { ...params, soldItemsOnly: false };
+                return await searchEbay(regularParams);
+            }
+            
             let friendlyMessage = `Failed to fetch from eBay Finding API: ${response.status}`;
             
             // Handle CORS errors specifically
