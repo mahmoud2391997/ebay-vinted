@@ -7,7 +7,7 @@ import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/Vi
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { searchEbay, EbayItem } from '@/lib/api/ebay';
+import { searchEbaySDK as searchEbay, EbayItem } from '@/lib/api/ebay-sdk';
 import { searchVinted } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
