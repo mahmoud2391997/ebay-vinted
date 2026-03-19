@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* eBay Scraper - Professional Dark Data Tool Design System */
+/* Scraper - Dark Data Tool Design System */
 
 @layer base {
   :root {
@@ -18,7 +18,7 @@
     --popover: 222 47% 8%;
     --popover-foreground: 210 40% 96%;
 
-    /* Amber/Gold primary - eBay inspired but more sophisticated */
+    /* Amber/Gold primary - inspired but more sophisticated */
     --primary: 38 92% 50%;
     --primary-foreground: 222 47% 6%;
 
@@ -40,7 +40,7 @@
 
     --radius: 0.75rem;
 
-    /* Custom tokens for eBay scraper */
+    /* Custom tokens for scraper */
     --success: 142 76% 46%;
     --success-foreground: 222 47% 6%;
     

@@ -16,7 +16,7 @@ export function EmptyState({ type, query, onSearch, initialSearchTerms = [] }: E
         </div>
         <h2 className="text-2xl font-semibold mb-2">Start Searching</h2>
         <p className="text-muted-foreground max-w-md">
-          Enter a search term above to find listings from eBay and Vinted. You can also click on the suggestions below.
+          Enter a search term above to find Vinted listings. You can also click on the suggestions below.
         </p>
         <div className="flex flex-wrap gap-2 mt-6 justify-center">
           {initialSearchTerms.map((term) => (

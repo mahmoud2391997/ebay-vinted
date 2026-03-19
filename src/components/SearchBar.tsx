@@ -70,7 +70,7 @@ export function SearchBar({ onSearch, isLoading, isThrottled }: SearchBarProps) 
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
           <Input
             type="text"
-            placeholder="Search eBay listings... (e.g., iPhone 15 Pro, Nike Air Max, Vintage Watch)"
+            placeholder="Search Vinted listings... (e.g., iPhone 15 Pro, Nike Air Max, Vintage Watch)"
             value={query}
             onChange={handleChange}
             maxLength={MAX_QUERY_LENGTH + 10}

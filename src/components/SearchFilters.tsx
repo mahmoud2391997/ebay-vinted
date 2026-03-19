@@ -17,7 +17,6 @@ interface SearchFiltersProps {
   onApplyPriceChange: () => void;
   country: string;
   onCountryChange: (value: string) => void;
-  platform: string;
   showSold: boolean;
   onShowSoldChange: (checked: boolean) => void;
 }
@@ -33,7 +32,6 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
   onApplyPriceChange,
   country,
   onCountryChange,
-  platform,
   showSold,
   onShowSoldChange
 }) => {
@@ -75,24 +73,22 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
           </div>
         </div>
         
-        {platform === 'vinted' && (
-          <div className="space-y-2">
-            <Label>Country</Label>
-            <Select value={country} onValueChange={onCountryChange}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="fr">France</SelectItem>
-                <SelectItem value="es">Spain</SelectItem>
-                <SelectItem value="it">Italy</SelectItem>
-                <SelectItem value="de">Germany</SelectItem>
-                <SelectItem value="uk">United Kingdom</SelectItem>
-                <SelectItem value="us">United States</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="space-y-2">
+          <Label>Country</Label>
+          <Select value={country} onValueChange={onCountryChange}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="fr">France</SelectItem>
+              <SelectItem value="es">Spain</SelectItem>
+              <SelectItem value="it">Italy</SelectItem>
+              <SelectItem value="de">Germany</SelectItem>
+              <SelectItem value="uk">United Kingdom</SelectItem>
+              <SelectItem value="us">United States</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="flex flex-col md:flex-row md:items-center gap-4 mt-4">
               <div className="flex items-center space-x-2">
@@ -100,15 +96,11 @@ export const SearchFilters: React.FC<SearchFiltersProps> = ({
                   id="show-sold" 
                   checked={showSold} 
                   onCheckedChange={onShowSoldChange}
-                  disabled={platform === 'vinted'}
                 />
-                <Label htmlFor="show-sold" className={`cursor-pointer ${platform === 'vinted' ? 'text-muted-foreground' : ''}`}>
+                <Label htmlFor="show-sold" className="cursor-pointer">
                   Show sold items
                 </Label>
               </div>
-              {platform === 'vinted' && (
-                <p className="text-xs text-muted-foreground">Sold items not available for Vinted</p>
-              )}
       </div>
     </div>
   );

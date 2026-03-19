@@ -1,20 +1,17 @@
 
-import { useState, useCallback, useRef, useEffect } from 'react';
-import { ShoppingBag, Zap, AlertCircle, Shield, Shirt, Search } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { ShoppingBag, AlertCircle } from 'lucide-react';
 import { SearchBar } from '@/components/SearchBar';
-import { ListingCard } from '@/components/ListingCard';
 import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/VintedVestiaireListingCard';
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { searchEbaySDK as searchEbay, EbayItem } from '@/lib/api/ebay-sdk';
 import { searchVinted } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PaginationControls } from '@/components/PaginationControls';
 import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
@@ -55,7 +52,6 @@ const Index = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [platform, setPlatform] = useState('ebay');
   const [hasMore, setHasMore] = useState(false);
   const [cache, setCache] = useState<Map<string, any>>(new Map());
   
@@ -66,9 +62,9 @@ const Index = () => {
   // Debounce search state to prevent excessive API calls
   const debouncedSearchState = useDebounce(searchState, 800);
 
-  const getCacheKey = (platform: string, state: typeof searchState) => {
+  const getCacheKey = (state: typeof searchState) => {
     const { query, page, itemsPerPage, maxPrice, minPrice, country, showSold } = state;
-    return `${platform}-${query}-${page}-${itemsPerPage}-${maxPrice || 'none'}-${minPrice || 'none'}-${country}-${showSold}`;
+    return `${query}-${page}-${itemsPerPage}-${maxPrice || 'none'}-${minPrice || 'none'}-${country}-${showSold}`;
   };
 
   useEffect(() => {
@@ -94,7 +90,7 @@ const Index = () => {
         return;
       }
 
-      const cacheKey = getCacheKey(platform, debouncedSearchState);
+      const cacheKey = getCacheKey(debouncedSearchState);
       const cachedData = cache.get(cacheKey);
 
       if (cachedData) {
@@ -114,7 +110,7 @@ const Index = () => {
       lastSearchTime.current = now;
 
       try {
-        let results;
+        let results: any;
         const apiOptions = {
           page: debouncedSearchState.page,
           itemsPerPage: debouncedSearchState.itemsPerPage,
@@ -123,73 +119,29 @@ const Index = () => {
           country: debouncedSearchState.country,
         };
 
-        if (platform === 'vinted') {
-          console.log('Vinted search - showSold:', debouncedSearchState.showSold, 'query:', debouncedSearchState.query);
-          results = debouncedSearchState.showSold
-            ? await searchSoldItems(debouncedSearchState.query, apiOptions)
-            : await searchVinted(debouncedSearchState.query, apiOptions);
+        console.log('Vinted search - showSold:', debouncedSearchState.showSold, 'query:', debouncedSearchState.query);
+        results = debouncedSearchState.showSold
+          ? await searchSoldItems(debouncedSearchState.query, apiOptions)
+          : await searchVinted(debouncedSearchState.query, apiOptions);
 
-          console.log('Vinted results count:', results.success ? results.data?.length : 0);
-
-          if (results.success) {
-            const resultData = {
-              items: results.data || [],
-              totalResults: debouncedSearchState.showSold ? results.count || results.data?.length || 0 : results.count || 0,
-              hasMore: results.pagination?.has_more || false,
-            };
-            setCache(prev => new Map(prev).set(cacheKey, resultData));
-            setItems(resultData.items);
-            setTotalResults(resultData.totalResults);
-            setHasMore(resultData.hasMore);
-            if (!results.data || results.data.length === 0) {
-              toast({ title: 'No results', description: `No listings found for "${debouncedSearchState.query}"` });
-            }
-          } else {
-            setError(results.error || 'Failed to fetch from Vinted.');
-            toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
+        if (results.success) {
+          const resultData = {
+            items: results.data || [],
+            totalResults: debouncedSearchState.showSold
+              ? results.count || results.data?.length || 0
+              : results.count || 0,
+            hasMore: results.pagination?.has_more || false,
+          };
+          setCache(prev => new Map(prev).set(cacheKey, resultData));
+          setItems(resultData.items);
+          setTotalResults(resultData.totalResults);
+          setHasMore(resultData.hasMore);
+          if (!results.data || results.data.length === 0) {
+            toast({ title: 'No results', description: `No listings found for "${debouncedSearchState.query}"` });
           }
-        } else { // eBay
-          const offset = (searchState.page - 1) * searchState.itemsPerPage;
-          const ebayOptions: any = { query: searchState.query, limit: searchState.itemsPerPage, offset };
-          
-          if (searchState.showSold) {
-            // Use sold items search
-            ebayOptions.soldItemsOnly = true;
-          }
-          
-          // Add price filters for regular search
-          if (!searchState.showSold) {
-            const filters = [];
-            if (searchState.minPrice && searchState.maxPrice) {
-              filters.push(`price:[${searchState.minPrice}..${searchState.maxPrice}],priceCurrency:USD`);
-            } else if (searchState.minPrice) {
-              filters.push(`price:[${searchState.minPrice}..],priceCurrency:USD`);
-            } else if (searchState.maxPrice) {
-              filters.push(`price:[..${searchState.maxPrice}],priceCurrency:USD`);
-            }
-            if (filters.length > 0) ebayOptions.filter = filters.join(',');
-          }
-          
-          results = await searchEbay(ebayOptions);
-
-          if ('retryAfter' in results) {
-            const errorMsg = `Rate limit exceeded. Please wait ${results.retryAfter} seconds.`;
-            setError(errorMsg);
-            toast({ title: 'Rate limit reached', description: `Please wait ${results.retryAfter}s.`, variant: 'destructive' });
-          } else {
-            const resultData = {
-              items: results.itemSummaries || [],
-              totalResults: results.total || 0,
-              hasMore: (results.offset || 0) + (results.itemSummaries?.length || 0) < (results.total || 0),
-            };
-            setCache(prev => new Map(prev).set(cacheKey, resultData));
-            setItems(resultData.items);
-            setTotalResults(resultData.totalResults);
-            setHasMore(resultData.hasMore);
-            if (!results.itemSummaries || results.itemSummaries.length === 0) {
-              toast({ title: 'No results', description: `No listings found for "${debouncedSearchState.query}" on eBay` });
-            }
-          }
+        } else {
+          setError(results.error || 'Failed to fetch from Vinted.');
+          toast({ title: 'Vinted Search Failed', description: results.error, variant: 'destructive' });
         }
       } catch (err) {
         console.error('Search error:', err);
@@ -202,7 +154,7 @@ const Index = () => {
     };
 
     performSearch();
-  }, [debouncedSearchState, platform, cache, toast, searchSoldItems, isInitialMount]);
+  }, [debouncedSearchState, cache, toast, searchSoldItems, isInitialMount]);
 
   const handleQuerySearch = (query: string) => {
     setSearchState(prevState => ({ ...prevState, query, page: 1 }));
@@ -264,24 +216,10 @@ const Index = () => {
     const worksheet = XLSX.utils.json_to_sheet(items);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Listings");
-    const fileName = `listings_${platform}_${new Date().toISOString()}.xlsx`;
+    const fileName = `listings_vinted_${new Date().toISOString()}.xlsx`;
     XLSX.writeFile(workbook, fileName);
     toast({ title: 'Export Successful', description: `Downloaded ${items.length} listings to ${fileName}` });
   };
-
-  const handlePlatformChange = (newPlatform: string) => {
-    setPlatform(newPlatform);
-    setItems([]); // Clear items to prevent showing stale data from the other platform
-    setTotalResults(0);
-    setHasMore(false);
-  };
-  
-  const platformConfig = {
-    ebay: { title: "eBay", gradient: "gradient-text", icon: <ShoppingBag className="h-6 w-6 text-primary" /> },
-    vinted: { title: "Vinted", gradient: "gradient-text-vinted", icon: <Shirt className="h-6 w-6 text-green-500" /> },
-  }
-
-  const currentPlatformConfig = platformConfig[platform as keyof typeof platformConfig] || platformConfig.ebay;
   
   return (
     <div className="min-h-screen">
@@ -292,8 +230,8 @@ const Index = () => {
                 <ShoppingBag className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Multi-Platform Scraper</h1>
-              <p className="text-xs text-muted-foreground">Search across eBay and Vinted</p>
+              <h1 className="text-xl font-bold">Vinted Scraper</h1>
+              <p className="text-xs text-muted-foreground">Search Vinted listings in real time</p>
             </div>
           </div>
         </div>
@@ -302,21 +240,12 @@ const Index = () => {
       <main className="container py-8 px-4">
         <div className="max-w-4xl mx-auto mb-10">
           <div className="text-center mb-8">
-             <h2 className={`text-4xl font-bold mb-3 ${currentPlatformConfig.gradient}`}>
-                Scrape {currentPlatformConfig.title}
-              </h2>
+            <h2 className="text-4xl font-bold mb-3 gradient-text">Scrape Vinted</h2>
             <p className="text-muted-foreground text-lg">
               Search millions of products in real-time
             </p>
           </div>
-          
-          <Tabs defaultValue="ebay" onValueChange={handlePlatformChange} className="w-full mb-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="ebay">eBay</TabsTrigger>
-              <TabsTrigger value="vinted">Vinted</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          
+
           <SearchBar onSearch={handleQuerySearch} isLoading={isLoading} isThrottled={isThrottled} />
           
           <div className="flex flex-wrap items-center gap-2 mt-4">
@@ -340,7 +269,6 @@ const Index = () => {
                   onApplyPriceChange={handleApplyPriceChange}
                   country={searchState.country}
                   onCountryChange={handleCountryChange}
-                  platform={platform}
                   showSold={searchState.showSold}
                   onShowSoldChange={handleShowSoldChange}
                 />
@@ -353,8 +281,7 @@ const Index = () => {
           )}
 
           <p className="text-center text-xs text-muted-foreground mt-3">
-            <Shield className="inline h-3 w-3 mr-1" />
-            {platform === 'ebay' ? 'Rate limited: 30 requests per minute' : 'No rate limits on this platform'}
+            Scraping Vinted listings
           </p>
         </div>
 
@@ -370,13 +297,15 @@ const Index = () => {
         ) : hasSearched && items.length > 0 ? (
           <div className="max-w-4xl mx-auto">
             <div className="space-y-4">
-              {items.map((item, index) =>
-                platform === 'ebay' ? (
-                  <ListingCard key={(item as EbayItem).itemId || index} item={item as EbayItem} index={index} isSold={searchState.showSold} />
-                ) : (
-                  <VintedVestiaireListingCard key={index} item={item as VintedVestiaireItem} index={index} platform={'Vinted'} isSold={searchState.showSold} />
-                )
-              )}
+              {items.map((item, index) => (
+                <VintedVestiaireListingCard
+                  key={index}
+                  item={item as VintedVestiaireItem}
+                  index={index}
+                  platform="Vinted"
+                  isSold={searchState.showSold}
+                />
+              ))}
             </div>
             <PaginationControls currentPage={searchState.page} onPageChange={handlePageChange} hasMore={hasMore} />
           </div>
@@ -389,7 +318,7 @@ const Index = () => {
 
       <footer className="border-t border-border/50 py-6 mt-12">
         <div className="container text-center text-sm text-muted-foreground px-4">
-          <p>Powered by the Vinted and eBay APIs</p>
+          <p>Powered by the Vinted API</p>
         </div>
       </footer>
     </div>
