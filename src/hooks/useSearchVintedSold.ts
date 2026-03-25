@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { searchVintedSold } from '@/lib/api/fashion';
+import { searchVintedSold, type VintedSearchResult } from '@/lib/api/fashion';
 import { useToast } from '@/hooks/use-toast';
 
 interface SearchOptions {
@@ -10,7 +10,7 @@ interface SearchOptions {
 }
 
 interface UseSearchVintedSoldReturn {
-  searchSoldItems: (query: string, options?: SearchOptions) => Promise<any>;
+  searchSoldItems: (query: string, options?: SearchOptions) => Promise<VintedSearchResult>;
   isLoading: boolean;
   error: string | null;
 }
@@ -35,7 +35,7 @@ export const useSearchVintedSold = (): UseSearchVintedSoldReturn => {
           description: errorMessage, 
           variant: 'destructive' 
         });
-        return { success: false, error: errorMessage };
+        return { success: false, data: [], error: errorMessage };
       }
 
       if (results.data.length === 0) {
@@ -54,7 +54,7 @@ export const useSearchVintedSold = (): UseSearchVintedSoldReturn => {
         description: errorMessage, 
         variant: 'destructive' 
       });
-      return { success: false, error: errorMessage };
+      return { success: false, data: [], error: errorMessage };
     } finally {
       setIsLoading(false);
     }

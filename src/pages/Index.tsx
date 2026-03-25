@@ -6,7 +6,7 @@ import { VintedVestiaireListingCard, VintedVestiaireItem } from '@/components/Vi
 import { SearchFilters } from '@/components/SearchFilters';
 import { LoadingSkeleton } from '@/components/LoadingSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { searchVinted } from '@/lib/api/fashion';
+import { searchVinted, type VintedSearchResult } from '@/lib/api/fashion';
 import { useSearchVintedSold } from '@/hooks/useSearchVintedSold';
 import { useToast } from '@/hooks/use-toast';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -45,14 +45,19 @@ const Index = () => {
     maxPrice: undefined as number | undefined,
   });
 
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<VintedVestiaireItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isThrottled, setIsThrottled] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [totalResults, setTotalResults] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [cache, setCache] = useState<Map<string, any>>(new Map());
+  const [cache, setCache] = useState<
+    Map<
+      string,
+      { items: VintedVestiaireItem[]; totalResults: number; hasMore: boolean }
+    >
+  >(new Map());
   
   const { searchSoldItems } = useSearchVintedSold();
   const lastSearchTime = useRef<number>(0);
@@ -109,7 +114,6 @@ const Index = () => {
       lastSearchTime.current = now;
 
       try {
-        let results: any;
         const apiOptions = {
           page: debouncedSearchState.page,
           itemsPerPage: debouncedSearchState.itemsPerPage,
@@ -119,13 +123,13 @@ const Index = () => {
         };
 
         console.log('Vinted search - showSold:', debouncedSearchState.showSold, 'query:', debouncedSearchState.query);
-        results = debouncedSearchState.showSold
+        const results: VintedSearchResult = debouncedSearchState.showSold
           ? await searchSoldItems(debouncedSearchState.query, apiOptions)
           : await searchVinted(debouncedSearchState.query, apiOptions);
 
         if (results.success) {
           const resultData = {
-            items: results.data || [],
+            items: (results.data || []) as VintedVestiaireItem[],
             totalResults: debouncedSearchState.showSold
               ? results.count || results.data?.length || 0
               : results.count || 0,
