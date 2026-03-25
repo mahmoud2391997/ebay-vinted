@@ -16,6 +16,17 @@ export default defineConfig(({ mode }) => {
         overlay: false,
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (!id.includes("node_modules")) return;
+            if (id.includes("/xlsx/") || id.includes("\\xlsx\\")) return "xlsx";
+            return "vendor";
+          },
+        },
+      },
+    },
     plugins: [
       react(), 
       mode === "development" && componentTagger()

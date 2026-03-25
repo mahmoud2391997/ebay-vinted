@@ -13,7 +13,6 @@ import { useDebounce } from '@/hooks/useDebounce';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { PaginationControls } from '@/components/PaginationControls';
-import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 
 const THROTTLE_DELAY = 1500;
@@ -208,11 +207,12 @@ const Index = () => {
     setSearchState(prevState => ({ ...prevState, showSold: checked, page: 1 }));
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     if (!items.length) {
       toast({ title: 'No data to export', description: 'Please perform a search first.' });
       return;
     }
+    const XLSX = await import('xlsx');
     const worksheet = XLSX.utils.json_to_sheet(items);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Listings");

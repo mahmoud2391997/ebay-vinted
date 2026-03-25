@@ -3,10 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "proxy": "node proxy-server.js",
-    "build": "vite build",
+    "build": "vite build --logLevel info",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
